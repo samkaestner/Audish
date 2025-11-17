@@ -1,0 +1,2 @@
+[console_scripts]
+audish = audish.cli:cli
