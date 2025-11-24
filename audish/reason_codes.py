@@ -10,6 +10,9 @@ DOUBLE_MAJOR_OVERLAP = "DOUBLE_MAJOR_OVERLAP"
 SCHEDULING_ERROR = "SCHEDULING_ERROR"
 FACULTY_CONSTRAINT_FAILED = "FACULTY_CONSTRAINT_FAILED"
 TIME_CONSTRAINT_FAILED = "TIME_CONSTRAINT_FAILED"
+REGISTRATION_DATE_MISMATCH = "REGISTRATION_DATE_MISMATCH"
+REGISTRATION_DATE_MISSING = "REGISTRATION_DATE_MISSING"
+FACULTY_AVAILABILITY_MISSING = "FACULTY_AVAILABILITY_MISSING"
 
 # Human-readable descriptions
 REASON_DESCRIPTIONS = {
@@ -20,6 +23,9 @@ REASON_DESCRIPTIONS = {
     SCHEDULING_ERROR: "Unexpected error during scheduling",
     FACULTY_CONSTRAINT_FAILED: "Faculty presence requirements not met",
     TIME_CONSTRAINT_FAILED: "Applicant availability constraints not satisfied",
+    REGISTRATION_DATE_MISMATCH: "Assigned date does not match registration date",
+    REGISTRATION_DATE_MISSING: "Registration date is missing",
+    FACULTY_AVAILABILITY_MISSING: "Faculty availability data is missing",
 }
 
 
@@ -34,6 +40,7 @@ def get_reason_description(reason_code: str) -> str:
         Human-readable description
     """
     return REASON_DESCRIPTIONS.get(reason_code, f"Unknown reason: {reason_code}")
+
 
 
 

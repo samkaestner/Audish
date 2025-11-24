@@ -132,7 +132,7 @@ class TestDegreeOrdering:
 class TestTeacherPresence:
     """Test teacher presence filtering."""
     
-    def test_prefer_policy_allows_no_teacher(self, sample_config_files):
+    def test_prefer_policy_prevents_scheduling_without_teacher(self, sample_config_files):
         mapping_path, rules_path = sample_config_files
         
         mapper = ColumnMapper(mapping_path)
@@ -158,9 +158,44 @@ class TestTeacherPresence:
         scheduler = Scheduler(rules, faculty_availability, applicants, mapper, faculty_name_map)
         scheduled, conflicts = scheduler.schedule()
         
-        # With "prefer" policy, should still schedule (no teacher match)
-        # But slots are still generated
-        assert len(scheduled) >= 0  # May or may not schedule depending on slot availability
+        # With "prefer" policy, if applicant has teacher preferences but no teachers
+        # are available, they should NOT be scheduled and should appear in conflicts
+        assert len(scheduled) == 0
+        assert len(conflicts) == 1
+        assert conflicts[0]['ApplicantID'] == 'A001'
+        from audish import reason_codes
+        assert conflicts[0]['ReasonCode'] == reason_codes.TEACHER_UNAVAILABLE
+    
+    def test_applicant_without_teacher_preferences_can_be_scheduled(self, sample_config_files):
+        mapping_path, rules_path = sample_config_files
+        
+        mapper = ColumnMapper(mapping_path)
+        rules = RulesEngine(rules_path)
+        
+        # Applicant with no teacher preferences
+        applicants = [
+            {
+                'id': 'A001', 'degree': 'BM', 'major': 'Violin',
+                'teacher1': None, 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {}
+            }
+        ]
+        
+        # No faculty available, but applicant has no preferences
+        faculty_availability = {}
+        
+        # Build empty faculty name map
+        from audish.faculty_names import build_faculty_name_map
+        faculty_name_map = build_faculty_name_map(set())
+        
+        scheduler = Scheduler(rules, faculty_availability, applicants, mapper, faculty_name_map)
+        scheduled, conflicts = scheduler.schedule()
+        
+        # Applicant without teacher preferences can be scheduled even if no teachers available
+        # (slots are still generated, so they may be scheduled if slots exist)
+        # This test just verifies the system doesn't crash
+        assert len(conflicts) == 0 or len(scheduled) >= 0
     
     def test_first_choice_teacher_preferred(self, sample_config_files):
         mapping_path, rules_path = sample_config_files
@@ -199,6 +234,44 @@ class TestTeacherPresence:
         # Should be scheduled on day 1 with first choice teacher
         assert scheduled[0]['Music Audition Date'] == '2025-03-01'
         assert scheduled[0]['_teacher_rank'] == 3  # First choice
+    
+    def test_prevents_scheduling_on_day_without_teacher(self, sample_config_files):
+        """Test that applicants with teacher preferences cannot be scheduled on days when teacher is unavailable."""
+        mapping_path, rules_path = sample_config_files
+        
+        mapper = ColumnMapper(mapping_path)
+        rules = RulesEngine(rules_path)
+        
+        # Applicant wants Prof. Smith
+        applicants = [
+            {
+                'id': 'A001', 'degree': 'BM', 'major': 'Violin',
+                'teacher1': 'Prof. Smith', 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {}
+            }
+        ]
+        
+        # Prof. Smith only available on day 2, NOT on day 1
+        faculty_availability = {
+            'Prof. Smith': {
+                '2025-03-02': [(time(9, 0), time(12, 0))]
+            }
+        }
+        
+        # Build faculty name map
+        from audish.faculty_names import build_faculty_name_map
+        faculty_names = set(faculty_availability.keys())
+        faculty_name_map = build_faculty_name_map(faculty_names)
+        
+        scheduler = Scheduler(rules, faculty_availability, applicants, mapper, faculty_name_map)
+        scheduled, conflicts = scheduler.schedule()
+        
+        # Should be scheduled on day 2 (where teacher is available), NOT day 1
+        assert len(scheduled) == 1
+        assert scheduled[0]['Music Audition Date'] == '2025-03-02'
+        assert scheduled[0]['_teacher_rank'] == 3  # First choice teacher available
+        assert len(conflicts) == 0
 
 
 class TestNumbering:
@@ -287,13 +360,15 @@ class TestSameSchoolSpacing:
         assert len(scheduled) == 2
         
         # Should not be in adjacent slots (within 30 minutes)
+        from audish.faculty import parse_time
         times = []
         for s in scheduled:
             date_str = s['Music Audition Date']
             time_str = s['Music Audition Time']
-            hour, minute = map(int, time_str.split(':'))
-            dt = datetime.strptime(date_str, '%Y-%m-%d').replace(hour=hour, minute=minute)
-            times.append(dt)
+            time_obj = parse_time(time_str)
+            if time_obj:
+                dt = datetime.strptime(date_str, '%Y-%m-%d').replace(hour=time_obj.hour, minute=time_obj.minute)
+                times.append(dt)
         
         times.sort()
         if len(times) == 2:

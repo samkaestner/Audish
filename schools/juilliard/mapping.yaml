@@ -16,6 +16,8 @@ applicants:
     juilliard_status: "Juilliard Status"
     bm_bcj_flag: "BM and BCJ Applicant"
     modality_accommodation: "Audition Modality Accommodation Approved"
+    # Optional: Add registration_date field if applicants have registered dates
+    # registration_date: "Event – Most Recent Registration Event Date/Time"
 
 faculty:
   sheet: "Sheet1"

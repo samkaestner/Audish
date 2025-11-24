@@ -67,9 +67,12 @@ def write_schedule_excel(
     ws = wb.active
     ws.title = sheet_name
     
-    # Build output columns: original + scheduling fields
+    # Build output columns: original + scheduling fields (only if not already present)
     scheduling_fields = ["Music Audition Date", "Music Audition Time", "Music Audition Order"]
-    output_columns = original_columns + scheduling_fields
+    # Filter out scheduling fields that are already in original_columns to avoid duplicates
+    original_set = set(original_columns)
+    new_scheduling_fields = [field for field in scheduling_fields if field not in original_set]
+    output_columns = original_columns + new_scheduling_fields
     
     # Write header
     for col_idx, col_name in enumerate(output_columns, start=1):

@@ -4,9 +4,29 @@ teacher_presence_policy: "prefer"   # or "require"
 same_school_spacing: true
 double_major_window_hours: 24
 
+# Global break configuration
+breaks:
+  lunch:
+    enabled: true
+    start: "13:00"  # 1:00 PM
+    end: "14:00"    # 2:00 PM
+    min_schedule_hours: 4  # Apply lunch break if schedule is longer than this
+  periodic:
+    enabled: true
+    interval_hours: 2  # Break every N hours
+    duration_slots: 1  # Break duration equals this many time slots
+
 calendar:
+  # Global defaults for all days and all disciplines (optional)
+  # If set, these apply to all days unless a day specifies its own start/end
+  # If not set, individual day start/end times are used
+  # default_start_time: "10:00"  # Uncomment to set global start time (e.g., 10:00 AM)
+  # default_end_time: "18:00"    # Uncomment to set global end time (e.g., 6:00 PM)
+  
   days:
     # Fill actual day list/hours for this cycle
+    # If default_start_time/default_end_time are set above, you can omit start/end here
+    # Individual day start/end times override global defaults
     - { date: 2025-02-28, start: "09:00", end: "17:00" }
     - { date: 2025-03-01, start: "09:00", end: "17:00" }
     - { date: 2025-03-02, start: "09:00", end: "17:00" }
@@ -17,6 +37,28 @@ calendar:
     - { date: 2025-03-07, start: "09:00", end: "17:00" }
 
 rules:
+  # Per-discipline time overrides:
+  # You can override start_time and/or end_time for any discipline or degree.
+  # Times are in 24-hour format (e.g., "10:00", "14:30", "17:00").
+  # If not specified, calendar day defaults are used.
+  #
+  # Examples:
+  # 1. Override for entire discipline (all degrees):
+  #    Violin:
+  #      start_time: "10:00"  # Start at 10:00 AM instead of calendar default
+  #      end_time: "18:00"    # End at 6:00 PM instead of calendar default
+  #      ALL: { cadence: { type: fixed_interval, minutes: 15 } }
+  #
+  # 2. Override for specific degree only:
+  #    Piano:
+  #      BM: { start_time: "10:00", cadence: { type: fixed_interval, minutes: 20 } }
+  #      MM: { start_time: "11:00", end_time: "16:00", cadence: { type: fixed_interval, minutes: 20 } }
+  #
+  # 3. Partial override (only start or only end):
+  #    Cello:
+  #      start_time: "10:00"  # Only override start, uses calendar end_time
+  #      ALL: { cadence: { type: fixed_interval, minutes: 15 } }
+  
   Bass Trombone:
     ALL:  { cadence: { type: per_hour, cap: 6, half_hour_distribution: [3,3] } }
   Bassoon:

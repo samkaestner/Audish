@@ -128,6 +128,11 @@ class ColumnMapper:
         # Start with original row if available
         if '_original' in normalized:
             physical = dict(normalized['_original'])
+            # Remove scheduling fields from original to avoid duplicates
+            # These will be added fresh by format_scheduled_output
+            scheduling_fields = ["Music Audition Date", "Music Audition Time", "Music Audition Order"]
+            for field in scheduling_fields:
+                physical.pop(field, None)
         else:
             physical = {}
         

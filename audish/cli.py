@@ -146,11 +146,16 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
     # 7. Write output files
     click.echo("\n[7/7] Writing output files...")
     try:
+        # Filter out scheduling fields from original_columns to avoid duplicates
+        # These will be added fresh at the end
+        scheduling_fields = ["Music Audition Date", "Music Audition Time", "Music Audition Order"]
+        filtered_original_columns = [col for col in original_columns if col not in scheduling_fields]
+        
         # Format scheduled output
-        scheduled_output = format_scheduled_output(scheduled, mapper, original_columns)
+        scheduled_output = format_scheduled_output(scheduled, mapper, filtered_original_columns)
         
         # Write schedule
-        write_schedule_excel(out_schedule, original_columns, scheduled_output)
+        write_schedule_excel(out_schedule, filtered_original_columns, scheduled_output)
         click.echo(f"  ✓ Wrote schedule: {out_schedule}")
         
         # Write conflicts
