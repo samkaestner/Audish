@@ -1,0 +1,181 @@
+# Audish - Audition Scheduler CLI
+
+Excel-in → Excel-out audition scheduler for Juilliard (single admin user).
+
+## Overview
+
+Audish is a stateless Python CLI that reads Excel workbooks containing applicant information and faculty availability, applies scheduling rules, and outputs:
+- **FinalSchedule.xlsx**: Original applicant data plus Music Audition Date, Time, and Order
+- **Conflicts.xlsx**: Applicants that couldn't be scheduled with reason codes
+- **Metrics.txt**: Summary statistics (scheduled/total, % first-choice, conflicts by reason, per-discipline counts)
+
+## Installation
+
+### Using Make (recommended)
+
+```bash
+# Create virtual environment and install package
+make install
+
+# Install with development dependencies (includes pytest)
+make install-dev
+```
+
+### Manual Installation
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+## Usage
+
+### Command Line
+
+```bash
+audish schedule \
+  --app Applicants.xlsx \
+  --fac Faculty.xlsx \
+  --map schools/juilliard/mapping.yaml \
+  --rules schools/juilliard/rules.yaml \
+  --out-schedule output/FinalSchedule.xlsx \
+  --out-conflicts output/Conflicts.xlsx \
+  --out-metrics output/Metrics.txt
+```
+
+### Using Make
+
+```bash
+# Run with default files (edit Makefile to customize)
+make run
+```
+
+## Configuration Files
+
+### mapping.yaml
+
+Maps physical Excel column names to logical fields. Allows the scheduler to adapt to different Slate export formats.
+
+Example:
+```yaml
+applicants:
+  sheet: "Export"
+  columns:
+    id: "Applicant ID"
+    degree: "Degree Level"
+    major: "Major (Application)"
+    teacher1: "1st Choice Teacher"
+    # ... more columns
+
+faculty:
+  sheet: "Sheet1"
+  columns:
+    faculty_name: "Faculty"
+    notes: "Notes"
+  # Date columns auto-detected by YYYY-MM-DD headers
+```
+
+### rules.yaml
+
+Defines scheduling rules, calendar, and discipline-specific cadences.
+
+Example:
+```yaml
+timezone: "America/New_York"
+degree_precedence: ["BM", "MM", "GD", "AD", "DMA"]
+teacher_presence_policy: "prefer"  # or "require"
+
+calendar:
+  days:
+    - { date: 2025-02-28, start: "09:00", end: "17:00" }
+    # ... more days
+
+rules:
+  Cello:
+    BM: { cadence: { type: per_hour, cap: 5, half_hour_distribution: [3,2] } }
+    MM: { cadence: { type: fixed_interval, minutes: 15 } }
+  # ... more disciplines
+```
+
+## Features
+
+### Scheduling Constraints
+
+- **Degree Precedence**: BM → MM/GD → AD → DMA (MM/GD must precede AD/DMA)
+- **Teacher Presence**: Configurable "prefer" or "require" policy for 1st/2nd/3rd choice teachers
+- **Same-School Spacing**: Avoids back-to-back slots from same institution (unless current Juilliard student)
+- **Double-Major**: Prevents overlap and keeps auditions within 24 hours if travel required
+
+### Cadence Types
+
+- **per_hour**: Cap with half-hour distribution (e.g., 5/hr → [3 at :00, 2 at :30])
+- **fixed_interval**: Fixed minutes between slots (15/20/30/17, etc.)
+
+### Special Patterns
+
+- **open_minutes_per_hour**: Reserves open time blocks (e.g., Oboe 12-minute open)
+- **break_every_n_applicants**: Inserts breaks after N applicants (e.g., French Horn)
+- **mid_schedule_break_minutes**: Single mid-day break (e.g., Conducting)
+- **end_of_cycle_buffer_minutes**: Reserved time at end (e.g., Percussion discussion)
+
+### Faculty Notes Grammar
+
+Faculty availability "Notes" column supports:
+- `after 1pm` / `after 13:00` - available after time
+- `before 2pm` - available before time
+- `10:00–14:00` / `10:00-14:00` - specific time window
+- `not Friday` / `no Fri` - exclude day of week
+- `except 3/1` - exclude specific date
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+
+# Or manually
+source .venv/bin/activate
+pytest tests/ -v
+```
+
+### Project Structure
+
+```
+audish/
+  __init__.py
+  cli.py              # Click CLI entrypoint
+  mapping.py          # Column normalization
+  faculty.py          # Faculty availability parsing
+  rules.py            # Slot generation
+  scheduler.py        # Core scheduling algorithm
+  io_excel.py         # Excel I/O
+  reason_codes.py     # Conflict reason constants
+
+tests/
+  test_faculty.py     # Notes parsing tests
+  test_rules.py       # Cadence generation tests
+  test_scheduler.py   # Scheduling logic tests
+```
+
+## Algorithm
+
+1. **Load & Normalize**: Read Excel files and map columns via mapping.yaml
+2. **Parse Availability**: Detect faculty date columns and parse Notes constraints
+3. **Generate Slots**: Build slot grids per discipline/day from rules.yaml
+4. **Precompute Valid Slots**: For each applicant, filter slots by teacher presence and availability
+5. **Order Applicants**: By degree precedence → fewest valid slots → stable ID
+6. **Greedy Assignment**: Assign each applicant to best available slot respecting constraints
+7. **Number Auditions**: Sequential numbering per discipline across all days (1...N)
+8. **Output Results**: Write scheduled applicants and conflicts to Excel
+
+## License
+
+MIT
+
+
+
+
+
