@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --border: 0 0% 0%;
+  }
+
+  .dark {
+    --background: 0 0% 3%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 3%;
+    --card-foreground: 0 0% 100%;
+    --border: 0 0% 0%;
+  }
+  
+  body.dark {
+    background-color: #0d0d0d;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: #0d0d0d;
+  }
+  body.dark {
+    background-color: #0d0d0d;
+  }
+}
+
+/* Neo-brutalist styling */
+@layer components {
+  .neo-button {
+    @apply border-2 border-black bg-accent text-accent-foreground font-bold px-6 py-3;
+    @apply transition-all duration-150;
+    @apply hover:shadow-[2px_2px_0px_0px_rgb(0,0,0)];
+    @apply active:shadow-[1px_1px_0px_0px_rgb(0,0,0)] active:translate-x-[1px] active:translate-y-[1px];
+    @apply cursor-pointer;
+  }
+
+  .neo-card {
+    @apply border-2 bg-card text-card-foreground p-6;
+    @apply border-black dark:border-white;
+    @apply transition-colors duration-150;
+  }
+
+  .neo-input {
+    @apply border-2 bg-background text-foreground px-4 py-2;
+    @apply border-black dark:border-white;
+    @apply focus:outline-none focus:ring-0;
+    @apply transition-colors duration-150;
+  }
+  
+  .neo-input:focus {
+    @apply border-accent;
+  }
+}
+

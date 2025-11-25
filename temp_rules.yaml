@@ -1,0 +1,339 @@
+timezone: America/New_York
+degree_precedence:
+  - BM
+  - MM
+  - GD
+  - AD
+  - DMA
+teacher_presence_policy: prefer
+same_school_spacing: true
+double_major_window_hours: 24
+breaks:
+  lunch:
+    enabled: true
+    start: '13:00'
+    end: '14:00'
+    min_schedule_hours: 4
+  periodic:
+    enabled: true
+    interval_hours: 2
+    duration_slots: 1
+calendar:
+  days:
+    - date: '2025-02-28'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-01'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-02'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-03'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-04'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-05'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-06'
+      start: '09:00'
+      end: '17:00'
+    - date: '2025-03-07'
+      start: '09:00'
+      end: '17:00'
+rules:
+  Bass Trombone:
+    ALL:
+      cadence:
+        type: per_hour
+        cap: 6
+        half_hour_distribution:
+          - 3
+          - 3
+  Bassoon:
+    ALL:
+      cadence:
+        type: per_hour
+        cap: 6
+        half_hour_distribution:
+          - 3
+          - 3
+  Cello:
+    BM:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 2
+    MM:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    GD:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    AD:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    DMA:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Clarinet (Recorded):
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Collaborative Piano (Recorded):
+    MM:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+    GD:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+    DMA:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+    AD:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+  Composition:
+    ALL:
+      mode: interview_panel
+      interview_minutes: 15
+      panel_size: 5
+      block_call_in:
+        size: 5
+        interval_minutes: 60
+      arrival_policy: arrive_early
+      notes: Overlapping interviews; keep rooms full; coordinate with monitors
+  Double Bass (Recorded):
+    BM:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 2
+    MM:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    DMA:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Flute:
+    ALL:
+      cadence:
+        type: per_hour
+        cap: 7
+        half_hour_distribution:
+          - 4
+          - 3
+      callbacks:
+        cadence:
+          type: per_hour
+          cap: 8
+          half_hour_distribution:
+            - 4
+            - 4
+        may_record: true
+  French Horn (Recorded):
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+      break_every_n_applicants: 5
+      break_minutes: 15
+  Guitar:
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+      midday_break: false
+      notes: Send finished schedule to Sharon Isbin
+  Harp:
+    Audition:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+    WarmUp:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+      start_time: '09:30'
+      rooms: 3
+      pattern: 50+10 transition
+      enforce_in_pilot: false
+    Practice:
+      cadence:
+        type: fixed_interval
+        minutes: 60
+      day:
+        - Sunday
+        - Monday
+      equal_time: true
+      enforce_in_pilot: false
+  Historical Performance:
+    Audition:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    Callback:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 2
+    Interview:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Jazz Studies:
+    Non-Drums:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+    Drums:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+    callbacks:
+      schedule_backwards: true
+      consolidate_room: Morse Hall
+  Oboe:
+    ALL:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 1
+      open_minutes_per_hour: 12
+  Orchestral Conducting:
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+      mid_schedule_break_minutes: 20
+      coordinate_with: Lab Orchestra (Joe Soucy)
+  Organ:
+    Audition:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+      starts_after_warmup: true
+    WarmUp:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+      start_time: '09:30'
+    Practice:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+      day:
+        - Sunday
+        - Monday
+      equal_time: true
+      may_extend_to: 45
+      enforce_in_pilot: false
+      notify: Paul Jacobs
+  Percussion:
+    BM:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+    MM:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+    DMA:
+      cadence:
+        type: fixed_interval
+        minutes: 30
+      end_of_cycle_buffer_minutes: 60
+  Piano:
+    External:
+      cadence:
+        type: fixed_interval
+        minutes: 20
+    CurrentJuilliard:
+      cadence:
+        type: fixed_interval
+        minutes: 17
+  Trombone (Recorded):
+    ALL:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 2
+  Trumpet (Recorded):
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Tuba:
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Viola:
+    BM:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 2
+    MM:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    GD:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    DMA:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Violin:
+    BM:
+      cadence:
+        type: per_hour
+        cap: 5
+        half_hour_distribution:
+          - 3
+          - 2
+    MM:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    GD:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+    DMA:
+      cadence:
+        type: fixed_interval
+        minutes: 15
+  Voice:
+    ALL:
+      cadence:
+        type: fixed_interval
+        minutes: 15

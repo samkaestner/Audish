@@ -146,16 +146,29 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
     # 7. Write output files
     click.echo("\n[7/7] Writing output files...")
     try:
-        # Filter out scheduling fields from original_columns to avoid duplicates
-        # These will be added fresh at the end
-        scheduling_fields = ["Music Audition Date", "Music Audition Time", "Music Audition Order"]
-        filtered_original_columns = [col for col in original_columns if col not in scheduling_fields]
+        # Detect existing audition columns in the input file (with or without "Music" prefix)
+        # Map internal field names to possible column names in the file
+        audition_date_fields = ["Music Audition Date", "Audition Date"]
+        audition_time_fields = ["Music Audition Time", "Audition Time"]
+        audition_order_fields = ["Music Audition Order", "Audition Order"]
         
-        # Format scheduled output
-        scheduled_output = format_scheduled_output(scheduled, mapper, filtered_original_columns)
+        # Find which columns exist in the original file
+        existing_date_col = next((col for col in original_columns if col in audition_date_fields), None)
+        existing_time_col = next((col for col in original_columns if col in audition_time_fields), None)
+        existing_order_col = next((col for col in original_columns if col in audition_order_fields), None)
         
-        # Write schedule
-        write_schedule_excel(out_schedule, filtered_original_columns, scheduled_output)
+        # Format scheduled output - use original_columns as-is (columns will be filled in place)
+        scheduled_output = format_scheduled_output(
+            scheduled, 
+            mapper, 
+            original_columns,
+            existing_date_col,
+            existing_time_col,
+            existing_order_col
+        )
+        
+        # Write schedule - use original_columns to preserve exact order
+        write_schedule_excel(out_schedule, original_columns, scheduled_output)
         click.echo(f"  ✓ Wrote schedule: {out_schedule}")
         
         # Write conflicts

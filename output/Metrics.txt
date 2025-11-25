@@ -1,0 +1,58 @@
+Overall Statistics
+  Total Applicants:     1132
+  Scheduled:            1045
+  Conflicts:            87
+  Fill Rate:            92.3%
+
+Teacher Preference Match
+  1st Choice:           688 (65.8%)
+  2nd Choice:           128
+  3rd Choice:           26
+  No Preference:        203
+
+Conflicts by Reason
+  CAPACITY_EXCEEDED: 71
+  TEACHER_UNAVAILABLE: 16
+
+Per-Discipline Breakdown
+  Baroque Bassoon: 3/3 (100.0%)
+  Baroque Cello: 4/4 (100.0%)
+  Baroque Double Bass: 3/3 (100.0%)
+  Baroque Flute: 3/3 (100.0%)
+  Baroque Oboe: 1/1 (100.0%)
+  Baroque Violin: 11/11 (100.0%)
+  Bass Trombone: 6/6 (100.0%)
+  Bassoon: 20/21 (95.2%)
+  Cello: 74/75 (98.7%)
+  Clarinet: 45/48 (93.8%)
+  Collaborative Piano: 24/24 (100.0%)
+  Composition: 46/46 (100.0%)
+  Double Bass: 39/40 (97.5%)
+  Flute: 18/18 (100.0%)
+  Guitar: 14/14 (100.0%)
+  Harp: 13/13 (100.0%)
+  Harpsichord: 2/2 (100.0%)
+  Horn: 32/32 (100.0%)
+  Jazz Alto Saxophone: 8/8 (100.0%)
+  Jazz Bass: 11/11 (100.0%)
+  Jazz Drums: 14/14 (100.0%)
+  Jazz Guitar: 8/8 (100.0%)
+  Jazz Piano: 12/12 (100.0%)
+  Jazz Tenor Saxophone: 14/14 (100.0%)
+  Jazz Tenor Trombone: 5/5 (100.0%)
+  Jazz Trumpet: 11/11 (100.0%)
+  Jazz Vibraphone: 3/3 (100.0%)
+  Jazz Voice: 9/9 (100.0%)
+  Oboe: 20/20 (100.0%)
+  Orchestral Conducting: 12/12 (100.0%)
+  Organ: 19/19 (100.0%)
+  Percussion: 15/15 (100.0%)
+  Piano: 154/161 (95.7%)
+  Plucked Instruments: 2/2 (100.0%)
+  Trombone: 12/12 (100.0%)
+  Trumpet: 35/38 (92.1%)
+  Tuba: 14/14 (100.0%)
+  Viola: 67/70 (95.7%)
+  Violin: 110/160 (68.8%)
+  Voice: 113/131 (86.3%)
+  Voice - Artist Diploma in Opera Studies: 19/19 (100.0%)

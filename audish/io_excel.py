@@ -67,12 +67,19 @@ def write_schedule_excel(
     ws = wb.active
     ws.title = sheet_name
     
-    # Build output columns: original + scheduling fields (only if not already present)
+    # Build output columns: use original_columns as-is
+    # The format_scheduled_output function handles filling in existing audition columns
+    # and only adds new columns if they don't exist
+    output_columns = original_columns
+    
+    # Check if any scheduling fields need to be added (they're in the row dict but not in columns)
     scheduling_fields = ["Music Audition Date", "Music Audition Time", "Music Audition Order"]
-    # Filter out scheduling fields that are already in original_columns to avoid duplicates
-    original_set = set(original_columns)
-    new_scheduling_fields = [field for field in scheduling_fields if field not in original_set]
-    output_columns = original_columns + new_scheduling_fields
+    if rows:
+        # Check first row to see if it has any scheduling fields not in original_columns
+        first_row = rows[0]
+        for field in scheduling_fields:
+            if field in first_row and field not in output_columns:
+                output_columns.append(field)
     
     # Write header
     for col_idx, col_name in enumerate(output_columns, start=1):

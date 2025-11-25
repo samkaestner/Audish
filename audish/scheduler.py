@@ -678,7 +678,10 @@ class Scheduler:
 def format_scheduled_output(
     scheduled: List[Dict[str, Any]],
     mapper: Any,
-    original_columns: List[str]
+    original_columns: List[str],
+    existing_date_col: Optional[str] = None,
+    existing_time_col: Optional[str] = None,
+    existing_order_col: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Format scheduled applicants for Excel output.
@@ -686,21 +689,47 @@ def format_scheduled_output(
     Args:
         scheduled: List of scheduled applicant dicts
         mapper: ColumnMapper instance
-        original_columns: Original column names from input
+        original_columns: Original column names from input (preserves order)
+        existing_date_col: Name of existing date column in input (if any)
+        existing_time_col: Name of existing time column in input (if any)
+        existing_order_col: Name of existing order column in input (if any)
         
     Returns:
-        List of dicts ready for Excel output
+        List of dicts ready for Excel output, with columns in original_columns order
     """
     output = []
     
+    # Internal field names used by the scheduler
+    internal_date = 'Music Audition Date'
+    internal_time = 'Music Audition Time'
+    internal_order = 'Music Audition Order'
+    
     for record in scheduled:
-        # Start with denormalized original data
-        row = mapper.denormalize_applicant(record)
+        # Get denormalized data (may not be in correct order)
+        denormalized = mapper.denormalize_applicant(record)
         
-        # Add scheduling fields
-        row['Music Audition Date'] = record.get('Music Audition Date', '')
-        row['Music Audition Time'] = record.get('Music Audition Time', '')
-        row['Music Audition Order'] = record.get('Music Audition Order', '')
+        # Build row dict in the exact order of original_columns
+        # This ensures output columns match input column order exactly
+        row = {}
+        for col_name in original_columns:
+            # If this column is one of the audition columns, fill it with scheduled data
+            if col_name == existing_date_col:
+                row[col_name] = record.get(internal_date, "")
+            elif col_name == existing_time_col:
+                row[col_name] = record.get(internal_time, "")
+            elif col_name == existing_order_col:
+                row[col_name] = record.get(internal_order, "")
+            else:
+                # Use value from denormalized data
+                row[col_name] = denormalized.get(col_name, "")
+        
+        # Only add scheduling fields at the end if they don't already exist in original_columns
+        if not existing_date_col:
+            row[internal_date] = record.get(internal_date, '')
+        if not existing_time_col:
+            row[internal_time] = record.get(internal_time, '')
+        if not existing_order_col:
+            row[internal_order] = record.get(internal_order, '')
         
         output.append(row)
     
