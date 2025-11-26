@@ -2,6 +2,8 @@
 
 Thank you for testing the Audition Scheduler application!
 
+> **For Developers**: To create the `.dmg` file for distribution, run `./package-for-testing.sh` from the `electron/` directory. The `.dmg` file will be created in `electron/dist/`.
+
 ## Prerequisites
 
 Before running the application, you need to install Python and the scheduler package:
@@ -14,30 +16,44 @@ Before running the application, you need to install Python and the scheduler pac
 
 ### 2. Install the Audition Scheduler Package
 
-1. Download or clone the entire `Audition_Scheduler` project folder
-2. Open Terminal/Command Prompt
-3. Navigate to the project root directory:
-   ```bash
-   cd /path/to/Audition_Scheduler
-   ```
-4. Install the package:
-   ```bash
-   pip install -e .
-   ```
-   (or `pip3 install -e .` on macOS/Linux if `pip` doesn't work)
+**⚠️ IMPORTANT**: The Electron app requires the Python `audish` package to be installed on your system. The app does NOT include Python or the package - you must install it separately.
 
-5. Verify installation:
-   ```bash
+1. Download or clone the entire `Audition_Scheduler` project folder (the same folder that contains the Electron app installer)
+2. Open Terminal/Command Prompt
+3. Navigate to the project root directory. In terminal:
+ 
+   cd /path/to/Audition_Scheduler
+ 
+   (This should be the folder containing `audish/`, `pyproject.toml`, `electron/`, etc.)
+
+4. Install the package. In terminal, paste and run:
+   
+   pip install -e .
+  
+   (or `pip3 install -e .` on macOS/Linux if `pip` doesn't work)
+   
+   **Note**: If you're using a virtual environment, activate it first. (Not likely)
+  
+   source .venv/bin/activate  # macOS/Linux
+   # or
+   .venv\Scripts\activate     # Windows
+   pip install -e .
+
+
+5. Verify installation. In terminal, type:
+ 
    audish --help
-   ```
-   You should see help text for the scheduler CLI.
+ 
+   You should see help text for the scheduler CLI. If you see "command not found", the installation didn't work. Make sure you are in the correct directlry in terminal, and start agin with step 4 above.
 
 ## Installing the UI Application
 
+**Note**: You should receive the installer file (`.dmg` for macOS, `.exe` for Windows, or `.AppImage`/`.deb` for Linux) from the developer. If you're building it yourself, see the `PACKAGING.md` file for instructions.
+
 ### macOS
-1. Open the `.dmg` file
+1. Open the `.dmg` file (should be named `Audition Scheduler-1.0.0.dmg` or similar)
 2. Drag "Audition Scheduler" to Applications
-3. Open from Applications (you may need to right-click and select "Open" the first time due to security)
+3. Open from Applications (you may need to right-click and select "Open" the first time due to macOS security)
 
 ### Windows
 1. Run the `.exe` installer
@@ -65,6 +81,11 @@ Open "Audition Scheduler" from your applications menu.
 - Click or drag & drop your Excel files into the upload areas
 - Select your Applicant Info file
 - Select your Faculty Availability file
+- **IMPORTANT** click the gear icon in the upper right and reconnect the mapping and rules files. These files are in /Users/pathname/Audition_Scheduler/schools/juilliard
+
+mapping.yaml
+rules.yaml
+
 
 ### 4. Configure Calendar
 
@@ -103,8 +124,11 @@ Open "Audition Scheduler" from your applications menu.
 - Try running `python --version` or `python3 --version` in terminal
 
 ### "Module not found" or "audish not found" error
-- Make sure you've installed the package: `pip install -e .` from project root
-- Verify with: `audish --help`
+- **This is the most common issue!** The packaged app requires Python and the `audish` package to be installed separately.
+- Make sure you've installed the package: `pip install -e .` from the project root directory
+- Verify with: `audish --help` (should show help text)
+- **Important**: You need to install from the same project folder that contains the `audish` directory and `pyproject.toml` file
+- If you're using a virtual environment, make sure it's activated when installing
 
 ### Application won't start
 - Check that you have Node.js 18+ installed (for development builds)

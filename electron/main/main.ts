@@ -70,12 +70,19 @@ ipcMain.handle('run-scheduler', async (_, config: {
   rulesFile: string;
   outputDir: string;
 }) => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     // Get the Python executable path
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
     
-    // Get the project root (go up from electron/main to project root)
-    const projectRoot = path.resolve(__dirname, '../../');
+    // Get the project root - use same logic as get-project-root for consistency
+    let projectRoot: string;
+    if (app.isPackaged) {
+      // In packaged app, resources are in app.asar or app.asar.unpacked
+      // The project root should be where the app was installed
+      projectRoot = path.resolve(process.resourcesPath, '..');
+    } else {
+      projectRoot = path.resolve(__dirname, '../../');
+    }
     const outputSchedule = path.join(config.outputDir, 'FinalSchedule.xlsx');
     const outputConflicts = path.join(config.outputDir, 'Conflicts.xlsx');
     const outputMetrics = path.join(config.outputDir, 'Metrics.txt');
@@ -122,25 +129,53 @@ ipcMain.handle('run-scheduler', async (_, config: {
             },
           });
         } else {
-          reject({
+          // Return error as result object instead of rejecting
+          let errorMessage = stderr || stdout || `Process exited with code ${code}`;
+          
+          // Provide helpful error messages for common issues
+          if (stderr.includes('No module named') || stderr.includes('ModuleNotFoundError')) {
+            if (stderr.includes('audish')) {
+              errorMessage = `Python module 'audish' not found.\n\nPlease install it by running:\n\n  pip install -e .\n\nfrom the project root directory.\n\nError details:\n${stderr || stdout}`;
+            } else {
+              errorMessage = `Python module not found.\n\nError details:\n${stderr || stdout}`;
+            }
+          }
+          
+          resolve({
             success: false,
             code,
             stdout,
             stderr,
-            error: stderr || stdout,
+            error: errorMessage,
           });
         }
       });
 
-      schedulerProcess.on('error', (error) => {
-        reject({
+      schedulerProcess.on('error', (error: any) => {
+        // Return error as result object instead of rejecting
+        let errorMessage = error.message || String(error);
+        
+        // Provide helpful error messages for common issues
+        if (error.code === 'ENOENT') {
+          errorMessage = `Python not found. Please install Python 3.8+ and ensure it's in your PATH.\n\nTried: ${pythonCmd}`;
+        } else if (stderr.includes('No module named') || stderr.includes('ModuleNotFoundError')) {
+          errorMessage = `Python module not found. Please install the audish package:\n\n  pip install -e .\n\n(from the project root directory)\n\nError details: ${stderr || errorMessage}`;
+        }
+        
+        resolve({
           success: false,
-          error: error.message,
+          error: errorMessage,
           stdout,
           stderr,
         });
       });
-    }).catch(reject);
+    }).catch((error) => {
+      // Return error as result object instead of rejecting
+      resolve({
+        success: false,
+        error: error.message || String(error),
+      });
+    });
   });
 });
 
@@ -160,7 +195,13 @@ ipcMain.handle('file-exists', async (_, filePath: string) => {
 ipcMain.handle('read-excel-preview', async (_, filePath: string, maxRows: number = 100) => {
   return new Promise((resolve) => {
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const projectRoot = path.resolve(__dirname, '../../');
+    // Get the project root - use same logic as get-project-root for consistency
+    let projectRoot: string;
+    if (app.isPackaged) {
+      projectRoot = path.resolve(process.resourcesPath, '..');
+    } else {
+      projectRoot = path.resolve(__dirname, '../../');
+    }
     const scriptPath = path.join(projectRoot, 'audish', 'excel_reader.py');
     
     const excelProcess = spawn(pythonCmd, [scriptPath, filePath, maxRows.toString()], {
@@ -184,10 +225,12 @@ ipcMain.handle('read-excel-preview', async (_, filePath: string, maxRows: number
           const result = JSON.parse(stdout);
           resolve(result);
         } catch (e) {
-          resolve({ success: false, error: 'Failed to parse Excel data', data: [], headers: [] });
+          console.error('Failed to parse Excel preview JSON:', e, 'stdout:', stdout);
+          resolve({ success: false, error: `Failed to parse Excel data: ${e}`, data: [], headers: [] });
         }
       } else {
-        resolve({ success: false, error: stderr || 'Failed to read Excel file', data: [], headers: [] });
+        console.error('Excel preview failed:', { code, stderr, stdout, filePath });
+        resolve({ success: false, error: stderr || stdout || 'Failed to read Excel file', data: [], headers: [] });
       }
     });
     
@@ -207,6 +250,13 @@ ipcMain.handle('write-file', async (_, filePath: string, content: string) => {
 });
 
 ipcMain.handle('get-project-root', async () => {
+  // In packaged app, __dirname points to electron/main, so go up two levels
+  // In dev, it's the same
+  if (app.isPackaged) {
+    // In packaged app, resources are in app.asar or app.asar.unpacked
+    // The project root should be where the app was installed
+    return path.resolve(process.resourcesPath, '..');
+  }
   return path.resolve(__dirname, '../../');
 });
 

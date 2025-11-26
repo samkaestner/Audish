@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { useSchedulerStore } from '../lib/store';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from './ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
-import { Download, CheckCircle, AlertCircle, BarChart3 } from 'lucide-react';
+import { Download, CheckCircle, AlertCircle, BarChart3, FileSpreadsheet } from 'lucide-react';
 
 export default function ResultsDisplay() {
   const { results, error } = useSchedulerStore();
@@ -13,7 +12,7 @@ export default function ResultsDisplay() {
   if (error) return null;
   if (!results) return null;
 
-  const handleDownload = async (filePath: string, filename: string) => {
+  const handleDownload = async (filePath: string) => {
     if (!window.electronAPI) return;
     
     try {
@@ -58,7 +57,7 @@ export default function ResultsDisplay() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleDownload(results.outputFiles.schedule, 'FinalSchedule.xlsx')}
+            onClick={() => handleDownload(results.outputFiles.schedule)}
           >
             <Download className="mr-2 h-4 w-4" />
             Schedule
@@ -66,7 +65,7 @@ export default function ResultsDisplay() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleDownload(results.outputFiles.conflicts, 'Conflicts.xlsx')}
+            onClick={() => handleDownload(results.outputFiles.conflicts)}
           >
             <Download className="mr-2 h-4 w-4" />
             Conflicts
@@ -74,27 +73,60 @@ export default function ResultsDisplay() {
         </div>
       </div>
 
-      {/* Metrics Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {Object.entries(metrics).slice(0, 4).map(([key, value], i) => {
-          // Simple logic to pick an icon based on the card index or content
-          const Icon = i === 0 ? BarChart3 : i === 1 ? CheckCircle : i === 2 ? AlertCircle : BarChart3;
-          
-          return (
-            <Card key={key}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {key.split('-').pop()?.trim()}
-                </CardTitle>
-                <Icon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{value}</div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {/* Success Message */}
+      <Card className="border-green-500/50 bg-green-500/5">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-4">
+            <CheckCircle className="h-6 w-6 text-green-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold mb-2">Schedule Generated Successfully</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Your schedule has been generated. Download the Excel files below to view the results.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="default"
+                  onClick={() => handleDownload(results.outputFiles.schedule)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Schedule
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleDownload(results.outputFiles.conflicts)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Conflicts
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Metrics Summary Cards - Only show if we have metrics data */}
+      {Object.keys(metrics).length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Object.entries(metrics).slice(0, 4).map(([key, value], i) => {
+            // Simple logic to pick an icon based on the card index or content
+            const Icon = i === 0 ? BarChart3 : i === 1 ? CheckCircle : i === 2 ? AlertCircle : BarChart3;
+            
+            return (
+              <Card key={key}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {key.split('-').pop()?.trim()}
+                  </CardTitle>
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{value}</div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tabs for Schedule, Conflicts, Metrics */}
       <Card className="border-0 shadow-none bg-transparent">
@@ -114,56 +146,37 @@ export default function ResultsDisplay() {
                   <div>
                     <CardTitle>Scheduled Applicants</CardTitle>
                     <CardDescription>
-                      {results.scheduledTotal || results.scheduled.length} applicants scheduled successfully
+                      Download the Excel file to view scheduled applicants
                     </CardDescription>
                   </div>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleDownload(results.outputFiles.schedule, 'FinalSchedule.xlsx')}
+                    onClick={() => handleDownload(results.outputFiles.schedule)}
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    Export Excel
+                    Download Excel
                   </Button>
                 </div>
               </CardHeader>
-              <div className="relative">
-                {results.scheduled.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <p className="text-muted-foreground">No scheduled applicants to display</p>
+              <CardContent className="py-12">
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <FileSpreadsheet className="h-12 w-12 text-muted-foreground/50" />
+                  <div>
+                    <p className="text-lg font-medium mb-2">Preview not available</p>
+                    <p className="text-sm text-muted-foreground">
+                      Please download the Excel file to view the scheduled applicants.
+                    </p>
                   </div>
-                ) : (
-                  <div className="rounded-md border-0">
-                    <Table>
-                      <TableHeader className="bg-muted/50">
-                        <TableRow>
-                          {results.scheduled[0] && Object.keys(results.scheduled[0]).map((key) => (
-                            <TableHead key={key} className="whitespace-nowrap">{key}</TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {results.scheduled.slice(0, 100).map((row, idx) => (
-                          <TableRow key={idx}>
-                            {Object.values(row).map((cell: any, cellIdx) => (
-                              <TableCell key={cellIdx} className="max-w-[200px] truncate" title={String(cell)}>
-                                {String(cell || '')}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-              {(results.scheduledTotal || results.scheduled.length) > 100 && (
-                <CardFooter className="border-t bg-muted/20 px-6 py-3">
-                  <p className="text-xs text-muted-foreground w-full text-center">
-                    Showing first 100 rows. Download the Excel file to view all {results.scheduledTotal || results.scheduled.length} records.
-                  </p>
-                </CardFooter>
-              )}
+                  <Button
+                    onClick={() => handleDownload(results.outputFiles.schedule)}
+                    className="mt-4"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Schedule Excel File
+                  </Button>
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
 
@@ -174,47 +187,38 @@ export default function ResultsDisplay() {
                   <div>
                     <CardTitle className="text-destructive">Conflicts</CardTitle>
                     <CardDescription>
-                      {results.conflictsTotal || results.conflicts.length} applicants could not be scheduled
+                      Download the Excel file to view applicants that could not be scheduled
                     </CardDescription>
                   </div>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleDownload(results.outputFiles.conflicts, 'Conflicts.xlsx')}
+                    onClick={() => handleDownload(results.outputFiles.conflicts)}
                   >
                     <Download className="mr-2 h-4 w-4" />
-                    Export Excel
+                    Download Excel
                   </Button>
                 </div>
               </CardHeader>
-              <div className="relative">
-                {results.conflicts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <CheckCircle className="h-12 w-12 text-green-500 mb-4 opacity-20" />
-                    <p className="text-lg font-medium">No conflicts found</p>
-                    <p className="text-sm text-muted-foreground">All applicants were scheduled successfully.</p>
+              <CardContent className="py-12">
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <AlertCircle className="h-12 w-12 text-muted-foreground/50" />
+                  <div>
+                    <p className="text-lg font-medium mb-2">Preview not available</p>
+                    <p className="text-sm text-muted-foreground">
+                      Please download the Excel file to view conflicts.
+                    </p>
                   </div>
-                ) : (
-                  <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        {results.conflicts[0] && Object.keys(results.conflicts[0]).map((key) => (
-                          <TableHead key={key}>{key}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {results.conflicts.map((row, idx) => (
-                        <TableRow key={idx}>
-                          {Object.values(row).map((cell: any, cellIdx) => (
-                            <TableCell key={cellIdx}>{String(cell || '')}</TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleDownload(results.outputFiles.conflicts)}
+                    className="mt-4"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Conflicts Excel File
+                  </Button>
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
 
@@ -226,7 +230,7 @@ export default function ResultsDisplay() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleDownload(results.outputFiles.metrics, 'Metrics.txt')}
+                    onClick={() => handleDownload(results.outputFiles.metrics)}
                   >
                     <Download className="mr-2 h-4 w-4" />
                     Download Text File

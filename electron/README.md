@@ -11,6 +11,11 @@ Electron desktop application for the Audition Scheduler.
 ### Setup
 
 1. Install root dependencies:
+You need to be in the electron directory within the audish folder. Change to the project root: 
+cd /Users/{YourUsername}/Documents/Dev/Audition_Scheduler 
+
+Then:
+
 ```bash
 cd electron
 npm install

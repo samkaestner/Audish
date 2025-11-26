@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSchedulerStore } from '../lib/store';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose } from './ui/dialog';
+import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter } from './ui/dialog';
 import { FileText } from 'lucide-react';
 import * as yaml from 'js-yaml';
 

@@ -5,13 +5,13 @@
 1. **Node.js 18+** installed
 2. **Python 3.8+** with the `audish` package installed
    ```bash
-   cd ..  # Go to project root
+   cd ..  # Go to project root cd /Users/{YourUsername}/Documents/Dev/Audition_Scheduler 
    pip install -e .
    ```
 
 ## First Time Setup
 
-1. Install dependencies:
+1. Install dependencies: copy and paste this one line at a time in a terminal window in the project root
    ```bash
    cd electron
    npm install

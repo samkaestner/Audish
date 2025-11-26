@@ -3,7 +3,7 @@ import { useSchedulerStore } from '../lib/store';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from './ui/card';
-import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose } from './ui/dialog';
+import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter } from './ui/dialog';
 import { Plus, Trash2, Play, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import * as yaml from 'js-yaml';
 
@@ -18,8 +18,6 @@ export default function CalendarConfig() {
     setIsRunning,
     setResults,
     setError,
-    setMappingFile,
-    setRulesFile,
   } = useSchedulerStore();
 
   const [showAddDayDialog, setShowAddDayDialog] = useState(false);
@@ -137,7 +135,7 @@ export default function CalendarConfig() {
 
       // Use custom schema to prevent automatic date parsing
       const schema = yaml.DEFAULT_SCHEMA.extend([]);
-      const rules = yaml.load(fileResult.content, { schema }) as any;
+      const rules = yaml.load(fileResult.content || '', { schema }) as any;
       rules.calendar = { days: calendarDays };
       
       // Write temporary rules file
@@ -162,46 +160,27 @@ export default function CalendarConfig() {
         outputDir,
       });
 
-      if (result.success) {
-        // Read output files - use a high limit for preview, but we'll get the actual count from metrics or total_rows
-        const scheduleResult = await window.electronAPI.readExcelPreview(result.outputFiles.schedule, 10000);
-        const conflictsResult = await window.electronAPI.readExcelPreview(result.outputFiles.conflicts, 10000);
+      if (result.success && result.outputFiles) {
+        // Read metrics file for summary
         const metricsResult = await window.electronAPI.readFile(result.outputFiles.metrics);
 
-        // Convert Excel preview data to table format
-        const scheduledData = scheduleResult.success && scheduleResult.headers
-          ? scheduleResult.data.map((row: string[]) => {
-              const obj: Record<string, string> = {};
-              scheduleResult.headers.forEach((header: string, idx: number) => {
-                obj[header] = row[idx] || '';
-              });
-              return obj;
-            })
-          : [];
-
-        const conflictsData = conflictsResult.success && conflictsResult.headers
-          ? conflictsResult.data.map((row: string[]) => {
-              const obj: Record<string, string> = {};
-              conflictsResult.headers.forEach((header: string, idx: number) => {
-                obj[header] = row[idx] || '';
-              });
-              return obj;
-            })
-          : [];
-
+        // Set results with empty preview data - users can download Excel files to view results
         setResults({
-          scheduled: scheduledData,
-          conflicts: conflictsData,
-          scheduledTotal: scheduleResult.total_rows || scheduledData.length,
-          conflictsTotal: conflictsResult.total_rows || conflictsData.length,
-          metrics: metricsResult.content || '',
+          scheduled: [],
+          conflicts: [],
+          scheduledTotal: 0,
+          conflictsTotal: 0,
+          metrics: metricsResult.content || result.stdout || 'Schedule generated successfully. Download Excel files to view results.',
           outputFiles: result.outputFiles,
         });
       } else {
-        setError(result.error || 'Scheduler failed');
+        // Show detailed error message
+        const errorMsg = result.error || (result as any).stderr || (result as any).stdout || 'Scheduler failed';
+        setError(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
       }
     } catch (error: any) {
-      setError(error.message || 'Failed to run scheduler');
+      const errorMsg = error?.message || error?.toString() || 'Failed to run scheduler';
+      setError(errorMsg);
     } finally {
       setIsRunning(false);
     }
@@ -251,7 +230,7 @@ export default function CalendarConfig() {
                   <Input
                     type="date"
                     className="h-8"
-                    value={typeof day.date === 'string' ? day.date : (day.date instanceof Date ? day.date.toISOString().split('T')[0] : '')}
+                    value={typeof day.date === 'string' ? day.date : ''}
                     onChange={(e) => updateDay(index, 'date', e.target.value)}
                   />
                   <div className="relative">
