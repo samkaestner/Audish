@@ -173,3 +173,5 @@ class TestBreakCombination:
             next_start = slots_sorted[i + 1][0]
             assert next_start >= current_end, "Slots should not overlap"
 
+
+

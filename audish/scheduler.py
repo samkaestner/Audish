@@ -94,9 +94,18 @@ class Scheduler:
                 'num_valid': len(valid_slots)
             })
         
-        # Order applicants by: degree precedence → fewest valid slots → stable ID
+        # Order applicants by: degree precedence → Juilliard students first → fewest valid slots → stable ID
+        # This ensures current Juilliard students are grouped together within each degree
+        def is_current_juilliard(applicant: Dict[str, Any]) -> int:
+            """Return 0 for Juilliard students (first), 1 for external (second)."""
+            juilliard_status = applicant.get('juilliard_status', '')
+            if juilliard_status and 'juilliard' in str(juilliard_status).lower():
+                return 0  # Juilliard students scheduled first
+            return 1  # External students scheduled after
+        
         applicant_slots.sort(key=lambda x: (
             self.rules.get_degree_rank(x['applicant'].get('degree', '')),
+            is_current_juilliard(x['applicant']),
             x['num_valid'],
             x['applicant'].get('id', '')
         ))

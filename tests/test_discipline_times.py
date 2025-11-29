@@ -128,3 +128,5 @@ class TestDisciplineTimeOverrides:
         last_slot_end = slots[-1][1]
         assert last_slot_end.hour <= 17
 
+
+

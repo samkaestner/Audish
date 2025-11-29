@@ -102,3 +102,5 @@ class TestGlobalCalendarTimes:
         last_slot_end = slots[-1][1]
         assert last_slot_end.hour <= 18, f"Should use global default 18:00 end, got {last_slot_end.hour}:{last_slot_end.minute:02d}"
 
+
+
