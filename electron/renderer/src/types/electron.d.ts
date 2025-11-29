@@ -19,6 +19,18 @@ export interface ElectronAPI {
       metrics: string;
     };
   }>;
+  validateConfig: (options: {
+    applicantFile: string;
+    facultyFile: string;
+    mappingFile: string;
+    rulesFile: string;
+  }) => Promise<{
+    success: boolean;
+    valid: boolean;
+    message?: string;
+    errors?: string;
+    error?: string;
+  }>;
   readFile: (filePath: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   fileExists: (filePath: string) => Promise<boolean>;
   readExcelPreview: (filePath: string, maxRows: number) => Promise<{

@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from './ui/card';
 import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter } from './ui/dialog';
-import { Plus, Trash2, Play, Calendar as CalendarIcon, Clock } from 'lucide-react';
+import { Plus, Trash2, Play, Calendar as CalendarIcon, Clock, CheckCircle2, AlertTriangle, Shield } from 'lucide-react';
 import * as yaml from 'js-yaml';
 
 export default function CalendarConfig() {
@@ -18,6 +18,11 @@ export default function CalendarConfig() {
     setIsRunning,
     setResults,
     setError,
+    isValidating,
+    validationResult,
+    setIsValidating,
+    setValidationResult,
+    clearValidation,
   } = useSchedulerStore();
 
   const [showAddDayDialog, setShowAddDayDialog] = useState(false);
@@ -106,6 +111,49 @@ export default function CalendarConfig() {
   };
 
 
+  const validateConfig = async () => {
+    if (!applicantFile || !facultyFile) {
+      setError('Please select both applicant and faculty files before validating');
+      return;
+    }
+
+    setIsValidating(true);
+    setError(null);
+    clearValidation();
+
+    try {
+      const projectRoot = await window.electronAPI.getProjectRoot();
+      
+      const mappingPath = mappingFile.startsWith('/') || mappingFile.match(/^[A-Z]:/)
+        ? mappingFile
+        : `${projectRoot}/${mappingFile}`;
+      
+      const rulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/)
+        ? rulesFile
+        : `${projectRoot}/${rulesFile}`;
+
+      const result = await window.electronAPI.validateConfig({
+        applicantFile,
+        facultyFile,
+        mappingFile: mappingPath,
+        rulesFile: rulesPath,
+      });
+
+      if (result.success) {
+        setValidationResult({
+          valid: result.valid,
+          message: result.message || (result.valid ? 'All checks passed!' : 'Validation failed'),
+        });
+      } else {
+        setError(result.error || 'Validation failed');
+      }
+    } catch (error: any) {
+      setError(error?.message || 'Validation failed');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   const runScheduler = async () => {
     if (!applicantFile || !facultyFile) {
       setError('Please select both applicant and faculty files');
@@ -119,6 +167,7 @@ export default function CalendarConfig() {
 
     setIsRunning(true);
     setError(null);
+    clearValidation();
 
     try {
       // Create temporary rules file with updated calendar
@@ -265,15 +314,48 @@ export default function CalendarConfig() {
           )}
         </CardContent>
         <CardFooter className="bg-muted/20 border-t p-6">
-          <Button
-            onClick={runScheduler}
-            size="lg"
-            disabled={!applicantFile || !facultyFile || calendarDays.length === 0}
-            className="w-full sm:w-auto"
-          >
-            <Play size={18} className="mr-2" />
-            Run Scheduler
-          </Button>
+          <div className="w-full space-y-4">
+            {/* Validation Result */}
+            {validationResult && (
+              <div className={`flex items-start gap-3 rounded-lg border p-4 ${
+                validationResult.valid 
+                  ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400' 
+                  : 'bg-destructive/10 border-destructive/30 text-destructive'
+              }`}>
+                {validationResult.valid ? (
+                  <CheckCircle2 className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                )}
+                <pre className="text-sm whitespace-pre-wrap font-mono overflow-auto max-h-64 flex-1">
+                  {validationResult.message}
+                </pre>
+              </div>
+            )}
+            
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                onClick={validateConfig}
+                variant="outline"
+                size="lg"
+                disabled={!applicantFile || !facultyFile || isValidating}
+                className="w-full sm:w-auto"
+              >
+                <Shield size={18} className="mr-2" />
+                {isValidating ? 'Validating...' : 'Validate Configuration'}
+              </Button>
+              <Button
+                onClick={runScheduler}
+                size="lg"
+                disabled={!applicantFile || !facultyFile || calendarDays.length === 0}
+                className="w-full sm:w-auto"
+              >
+                <Play size={18} className="mr-2" />
+                Run Scheduler
+              </Button>
+            </div>
+          </div>
         </CardFooter>
       </Card>
 

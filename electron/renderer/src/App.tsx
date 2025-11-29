@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import FileUpload from './components/FileUpload';
 import CalendarConfig from './components/CalendarConfig';
 import ResultsDisplay from './components/ResultsDisplay';
@@ -8,7 +8,7 @@ import { useSchedulerStore } from './lib/store';
 import { Button } from './components/ui/button';
 import { Card, CardContent } from './components/ui/card';
 import { Progress } from './components/ui/progress';
-import { Moon, Sun, Settings } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 
 function App() {
   const [darkMode, setDarkMode] = useState(true);
@@ -29,6 +29,19 @@ function App() {
     }
   }, [isRunning]);
 
+  // Hidden keyboard shortcut for developer settings (Ctrl+Shift+S / Cmd+Shift+S)
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      setShowSettings(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
@@ -39,16 +52,6 @@ function App() {
             <h1 className="text-xl font-semibold tracking-tight hidden sm:block">Audition Scheduler</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowSettings(true)}
-              className="h-9 w-9 rounded-full"
-              title="Settings"
-            >
-              <Settings className="h-4 w-4" />
-              <span className="sr-only">Open settings</span>
-            </Button>
             <Button
               variant="ghost"
               size="icon"

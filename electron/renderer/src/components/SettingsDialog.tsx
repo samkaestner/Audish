@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useSchedulerStore } from '../lib/store';
+import { SCHOOL_CONFIG } from '../lib/config';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter } from './ui/dialog';
-import { FileText } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import * as yaml from 'js-yaml';
 
 interface SettingsDialogProps {
@@ -87,17 +88,19 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          <span>Advanced Settings</span>
+          <Wrench className="h-5 w-5" />
+          <span>Developer Settings</span>
         </DialogTitle>
       </DialogHeader>
       <DialogContent>
         <div className="space-y-6 py-4">
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Configuration files control how the scheduler processes your data. 
-              These settings are typically only changed for advanced use cases.
-            </p>
+            <div className="rounded-md bg-amber-500/10 border border-amber-500/30 p-3">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                These settings are for development and debugging only. 
+                The app is configured for <strong>{SCHOOL_CONFIG.name}</strong>.
+              </p>
+            </div>
           </div>
 
           <div className="grid gap-4">

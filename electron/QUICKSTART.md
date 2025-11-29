@@ -1,31 +1,62 @@
 # Quick Start Guide
 
-## Prerequisites
+## For End Users
 
-1. **Node.js 18+** installed
-2. **Python 3.8+** with the `audish` package installed
-   ```bash
-   cd ..  # Go to project root cd /Users/{YourUsername}/Documents/Dev/Audition_Scheduler 
-   pip install -e .
-   ```
+### Installation
 
-## First Time Setup
+1. Download the installer for your platform:
+   - **macOS**: `Audition Scheduler-X.X.X-arm64.dmg`
+   - **Windows**: `Audition Scheduler Setup X.X.X.exe`
+   - **Linux**: `Audition-Scheduler-X.X.X.AppImage` or `.deb`
 
-1. Install dependencies: copy and paste this one line at a time in a terminal window in the project root
-   ```bash
-   cd electron
-   npm install
-   cd renderer
-   npm install
-   cd ..
-   ```
+2. Install the application:
+   - **macOS**: Open DMG, drag to Applications
+   - **Windows**: Run installer, follow wizard
+   - **Linux**: Run AppImage or install deb package
 
-2. Build TypeScript:
-   ```bash
-   npm run build:main
-   ```
+3. Launch and use! No additional setup required.
 
-## Running the App
+### Usage
+
+1. **Upload Files**: Click or drag & drop your Excel files:
+   - Applicant Info file (from Slate export)
+   - Faculty Availability file
+
+2. **Validate** (recommended): Click "Validate Configuration" to check files
+
+3. **Configure Calendar**: Add or edit audition days
+
+4. **Run Scheduler**: Click "Run Scheduler" button
+
+5. **Download Results**: Save the output Excel files
+
+---
+
+## For Developers
+
+### Prerequisites
+
+- Node.js 18+
+- Python 3.8+ with audish package installed
+
+### First Time Setup
+
+```bash
+# From project root
+pip install -e .
+
+# Install dependencies
+cd electron
+npm install
+cd renderer
+npm install
+cd ..
+
+# Build TypeScript
+npm run build:main
+```
+
+### Running the App
 
 ```bash
 npm run dev
@@ -36,39 +67,26 @@ This will:
 - Launch the Electron window
 - Enable hot reload for development
 
-## Building for Production
+### Building for Distribution
 
 ```bash
-npm run build
+# From project root - builds with bundled Python
+./scripts/build-all.sh --mac
 ```
 
-This builds both the main process and renderer.
+Or from electron directory:
+```bash
+npm run dist:mac
+```
 
-## Usage
+See [PACKAGING.md](PACKAGING.md) for full build instructions.
 
-1. **Upload Files**: Click or drag & drop your Excel files:
-   - Applicant Info file
-   - Faculty Availability file
+### Developer Settings
 
-2. **Configure Calendar**: 
-   - Add audition days with start/end times
-   - Or load from existing `rules.yaml`
-
-3. **Select Configuration Files**:
-   - Mapping file (default: `schools/juilliard/mapping.yaml`)
-   - Rules file (default: `schools/juilliard/rules.yaml`)
-
-4. **Run Scheduler**: Click "Run Scheduler" button
-
-5. **View Results**: 
-   - See metrics summary
-   - Browse scheduled applicants
-   - Review conflicts
-   - Download output files
+Hidden settings are accessible via **Ctrl+Shift+S** (or **Cmd+Shift+S** on Mac) for debugging.
 
 ## Troubleshooting
 
-- **Python not found**: Make sure Python is in your PATH
-- **Module not found**: Ensure `audish` package is installed (`pip install -e .` from project root)
 - **Port 5173 in use**: Stop other Vite dev servers or change port in `vite.config.ts`
-
+- **Python errors in dev mode**: Ensure `audish` package is installed (`pip install -e .` from project root)
+- **Module not found**: Make sure all npm dependencies are installed
