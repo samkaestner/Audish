@@ -1,13 +1,70 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSchedulerStore } from '../lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
-import { Download, CheckCircle, AlertCircle, BarChart3, FileSpreadsheet } from 'lucide-react';
+import { 
+  Download, 
+  CheckCircle, 
+  AlertTriangle, 
+  BarChart3, 
+  FileSpreadsheet,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
+
+interface Conflict {
+  name?: string;
+  discipline?: string;
+  degree?: string;
+  reason?: string;
+  details?: string;
+}
 
 export default function ResultsDisplay() {
   const { results, error } = useSchedulerStore();
-  const [activeTab, setActiveTab] = useState('schedule');
+  const [conflicts, setConflicts] = useState<Conflict[]>([]);
+  const [loadingConflicts, setLoadingConflicts] = useState(false);
+  const [showRawMetrics, setShowRawMetrics] = useState(false);
+
+  // Load conflicts preview on mount
+  useEffect(() => {
+    if (results?.outputFiles?.conflicts) {
+      loadConflictsPreview();
+    }
+  }, [results?.outputFiles?.conflicts]);
+
+  const loadConflictsPreview = async () => {
+    if (!window.electronAPI || !results?.outputFiles?.conflicts) return;
+    
+    setLoadingConflicts(true);
+    try {
+      const preview = await window.electronAPI.readExcelPreview(results.outputFiles.conflicts, 15);
+      if (preview.success && preview.data && preview.headers) {
+        // Map headers to our conflict structure
+        const headers = preview.headers.map((h: string) => h.toLowerCase());
+        const nameIdx = headers.findIndex((h: string) => h.includes('name') || h.includes('last') || h.includes('first'));
+        const discIdx = headers.findIndex((h: string) => h.includes('discipline') || h.includes('instrument'));
+        const degreeIdx = headers.findIndex((h: string) => h.includes('degree'));
+        const reasonIdx = headers.findIndex((h: string) => h.includes('reason') || h.includes('code'));
+        const detailsIdx = headers.findIndex((h: string) => h.includes('detail') || h.includes('note'));
+        
+        const mappedConflicts: Conflict[] = preview.data.map((row: string[]) => ({
+          name: nameIdx >= 0 ? row[nameIdx] : row[0] || 'Unknown',
+          discipline: discIdx >= 0 ? row[discIdx] : row[1] || '-',
+          degree: degreeIdx >= 0 ? row[degreeIdx] : '-',
+          reason: reasonIdx >= 0 ? row[reasonIdx] : '-',
+          details: detailsIdx >= 0 ? row[detailsIdx] : '-',
+        }));
+        
+        setConflicts(mappedConflicts);
+      }
+    } catch (err) {
+      console.error('Failed to load conflicts preview:', err);
+    } finally {
+      setLoadingConflicts(false);
+    }
+  };
 
   if (error) return null;
   if (!results) return null;
@@ -25,21 +82,38 @@ export default function ResultsDisplay() {
     }
   };
 
+  const handleOpenInExcel = async (filePath: string) => {
+    if (!window.electronAPI) return;
+    
+    try {
+      const result = await window.electronAPI.openFile(filePath);
+      if (!result.success) {
+        alert(`Failed to open file: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      alert(`Error opening file: ${error.message}`);
+    }
+  };
+
   const parseMetrics = (metricsText: string) => {
     const lines = metricsText.split('\n');
-    const metrics: Record<string, string> = {};
+    const metrics: { key: string; value: string; section: string }[] = [];
     let currentSection = '';
 
     lines.forEach((line) => {
       const trimmed = line.trim();
       if (!trimmed) return;
 
-      if (!trimmed.startsWith('  ')) {
+      if (!trimmed.startsWith('  ') && !trimmed.includes(':')) {
         currentSection = trimmed;
-      } else {
+      } else if (trimmed.includes(':')) {
         const [key, ...valueParts] = trimmed.split(':');
         if (key && valueParts.length > 0) {
-          metrics[`${currentSection} - ${key.trim()}`] = valueParts.join(':').trim();
+          metrics.push({
+            key: key.trim(),
+            value: valueParts.join(':').trim(),
+            section: currentSection
+          });
         }
       }
     });
@@ -47,33 +121,14 @@ export default function ResultsDisplay() {
     return metrics;
   };
 
-  const metrics = parseMetrics(results.metrics);
+  const allMetrics = parseMetrics(results.metrics);
+  const summaryMetrics = allMetrics.slice(0, 4);
+  const hasMoreConflicts = conflicts.length > 10;
+  const displayedConflicts = conflicts.slice(0, 10);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Results</h2>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDownload(results.outputFiles.schedule)}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Schedule
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleDownload(results.outputFiles.conflicts)}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Conflicts
-          </Button>
-        </div>
-      </div>
-
-      {/* Success Message */}
+      {/* Success Message with Actions */}
       <Card className="border-green-500/50 bg-green-500/5">
         <CardContent className="pt-6">
           <div className="flex items-start gap-4">
@@ -81,22 +136,21 @@ export default function ResultsDisplay() {
             <div className="flex-1">
               <h3 className="text-lg font-semibold mb-2">Schedule Generated Successfully</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Your schedule has been generated. Download the Excel files below to view the results.
+                Your audition schedule has been created. Open in Excel to review and make any final adjustments.
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <Button
-                  variant="default"
-                  onClick={() => handleDownload(results.outputFiles.schedule)}
+                  onClick={() => handleOpenInExcel(results.outputFiles.schedule)}
                 >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Schedule
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Open in Excel
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => handleDownload(results.outputFiles.conflicts)}
+                  onClick={() => handleDownload(results.outputFiles.schedule)}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Download Conflicts
+                  Download
                 </Button>
               </div>
             </div>
@@ -104,23 +158,22 @@ export default function ResultsDisplay() {
         </CardContent>
       </Card>
 
-      {/* Metrics Summary Cards - Only show if we have metrics data */}
-      {Object.keys(metrics).length > 0 && (
+      {/* Metrics Summary Cards */}
+      {summaryMetrics.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {Object.entries(metrics).slice(0, 4).map(([key, value], i) => {
-            // Simple logic to pick an icon based on the card index or content
-            const Icon = i === 0 ? BarChart3 : i === 1 ? CheckCircle : i === 2 ? AlertCircle : BarChart3;
+          {summaryMetrics.map((metric, i) => {
+            const Icon = i === 0 ? BarChart3 : i === 1 ? CheckCircle : i === 2 ? AlertTriangle : BarChart3;
             
             return (
-              <Card key={key}>
+              <Card key={i}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {key.split('-').pop()?.trim()}
+                    {metric.key}
                   </CardTitle>
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{value}</div>
+                  <div className="text-2xl font-bold">{metric.value}</div>
                 </CardContent>
               </Card>
             );
@@ -128,125 +181,150 @@ export default function ResultsDisplay() {
         </div>
       )}
 
-      {/* Tabs for Schedule, Conflicts, Metrics */}
-      <Card className="border-0 shadow-none bg-transparent">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="flex items-center justify-between mb-4">
-            <TabsList>
-              <TabsTrigger value="schedule">Schedule</TabsTrigger>
-              <TabsTrigger value="conflicts">Conflicts</TabsTrigger>
-              <TabsTrigger value="metrics">Raw Metrics</TabsTrigger>
-            </TabsList>
+      {/* Conflicts Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Conflicts
+              </CardTitle>
+              <CardDescription>
+                {conflicts.length === 0 
+                  ? 'No conflicts found - all applicants were scheduled!'
+                  : `${conflicts.length} applicant${conflicts.length === 1 ? '' : 's'} could not be scheduled`
+                }
+              </CardDescription>
+            </div>
+            {conflicts.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownload(results.outputFiles.conflicts)}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download All
+              </Button>
+            )}
           </div>
+        </CardHeader>
+        {conflicts.length > 0 && (
+          <CardContent className="pt-0">
+            <div className="rounded-md border">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Discipline</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Degree</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Reason</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedConflicts.map((conflict, i) => (
+                      <tr key={i} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-medium">{conflict.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{conflict.discipline}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{conflict.degree}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                            {conflict.reason}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-xs truncate" title={conflict.details}>
+                          {conflict.details}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            {hasMoreConflicts && (
+              <div className="mt-4 text-center">
+                <Button
+                  variant="ghost"
+                  onClick={() => handleDownload(results.outputFiles.conflicts)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  View all {conflicts.length} conflicts
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        )}
+        {conflicts.length === 0 && !loadingConflicts && (
+          <CardContent className="pt-0">
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <CheckCircle className="mr-2 h-5 w-5 text-green-500" />
+              All applicants were successfully scheduled
+            </div>
+          </CardContent>
+        )}
+      </Card>
 
-          <TabsContent value="schedule" className="mt-0">
-            <Card>
-              <CardHeader className="px-6 py-4 border-b">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Scheduled Applicants</CardTitle>
-                    <CardDescription>
-                      Download the Excel file to view scheduled applicants
-                    </CardDescription>
+      {/* Raw Metrics (Collapsible) */}
+      <Card>
+        <CardHeader 
+          className="cursor-pointer hover:bg-muted/30 transition-colors"
+          onClick={() => setShowRawMetrics(!showRawMetrics)}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Detailed Metrics</CardTitle>
+              <CardDescription>Full scheduling report with all statistics</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload(results.outputFiles.metrics);
+                }}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+              {showRawMetrics ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        {showRawMetrics && (
+          <CardContent className="pt-0">
+            <div className="rounded-md border bg-muted/20 p-4 space-y-4">
+              {/* Group metrics by section */}
+              {Array.from(new Set(allMetrics.map(m => m.section))).map(section => (
+                <div key={section}>
+                  {section && (
+                    <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                      {section}
+                    </h4>
+                  )}
+                  <div className="grid gap-2">
+                    {allMetrics
+                      .filter(m => m.section === section)
+                      .map((metric, i) => (
+                        <div key={i} className="flex justify-between items-center py-1 border-b border-muted last:border-0">
+                          <span className="text-sm text-muted-foreground">{metric.key}</span>
+                          <span className="text-sm font-medium">{metric.value}</span>
+                        </div>
+                      ))
+                    }
                   </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleDownload(results.outputFiles.schedule)}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Excel
-                  </Button>
                 </div>
-              </CardHeader>
-              <CardContent className="py-12">
-                <div className="flex flex-col items-center justify-center text-center space-y-4">
-                  <FileSpreadsheet className="h-12 w-12 text-muted-foreground/50" />
-                  <div>
-                    <p className="text-lg font-medium mb-2">Preview not available</p>
-                    <p className="text-sm text-muted-foreground">
-                      Please download the Excel file to view the scheduled applicants.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={() => handleDownload(results.outputFiles.schedule)}
-                    className="mt-4"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Schedule Excel File
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="conflicts" className="mt-0">
-            <Card>
-              <CardHeader className="px-6 py-4 border-b">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-destructive">Conflicts</CardTitle>
-                    <CardDescription>
-                      Download the Excel file to view applicants that could not be scheduled
-                    </CardDescription>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleDownload(results.outputFiles.conflicts)}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Excel
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="py-12">
-                <div className="flex flex-col items-center justify-center text-center space-y-4">
-                  <AlertCircle className="h-12 w-12 text-muted-foreground/50" />
-                  <div>
-                    <p className="text-lg font-medium mb-2">Preview not available</p>
-                    <p className="text-sm text-muted-foreground">
-                      Please download the Excel file to view conflicts.
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => handleDownload(results.outputFiles.conflicts)}
-                    className="mt-4"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Conflicts Excel File
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="metrics" className="mt-0">
-            <Card>
-              <CardHeader className="px-6 py-4 border-b">
-                <div className="flex items-center justify-between">
-                  <CardTitle>Full Metrics Report</CardTitle>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleDownload(results.outputFiles.metrics)}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Text File
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="bg-muted/30 p-6 overflow-x-auto">
-                  <pre className="font-mono text-sm whitespace-pre-wrap text-foreground/80">
-                    {results.metrics}
-                  </pre>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              ))}
+            </div>
+          </CardContent>
+        )}
       </Card>
     </div>
   );
