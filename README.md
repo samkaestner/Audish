@@ -31,15 +31,6 @@ pip install -e .
 
 ## Usage
 
-### Desktop Application (Recommended)
-
-For most users, the Electron desktop application provides the easiest experience:
-- Pre-configured for your school
-- No Python installation required
-- Visual interface for file upload and scheduling
-
-See `electron/TESTER_INSTRUCTIONS.md` for the desktop app guide.
-
 ### Command Line
 
 ```bash
@@ -52,24 +43,6 @@ audish schedule \
   --out-conflicts output/Conflicts.xlsx \
   --out-metrics output/Metrics.txt
 ```
-
-### Validate Configuration (Before Scheduling)
-
-Run validation to catch configuration issues early:
-
-```bash
-audish validate \
-  --app Applicants.xlsx \
-  --fac Faculty.xlsx \
-  --map schools/juilliard/mapping.yaml \
-  --rules schools/juilliard/rules.yaml
-```
-
-This checks:
-- YAML file syntax and structure
-- Excel column names match mapping configuration
-- All applicant disciplines have scheduling rules
-- Calendar days are properly configured
 
 ### Using Make
 
@@ -174,18 +147,12 @@ pytest tests/ -v
 audish/
   __init__.py
   cli.py              # Click CLI entrypoint
-  validation.py       # Configuration validation
   mapping.py          # Column normalization
   faculty.py          # Faculty availability parsing
   rules.py            # Slot generation
   scheduler.py        # Core scheduling algorithm
   io_excel.py         # Excel I/O
   reason_codes.py     # Conflict reason constants
-
-electron/             # Desktop UI application
-  main/               # Electron main process
-  renderer/           # React frontend
-  PACKAGING.md        # Build instructions
 
 tests/
   test_faculty.py     # Notes parsing tests
