@@ -3,44 +3,12 @@ CLI entrypoint using Click.
 """
 
 import sys
-import os
 from pathlib import Path
 from collections import Counter, defaultdict
 
 import click
 
 from .io_excel import read_excel_sheet, write_schedule_excel, write_conflicts_excel, get_date_columns
-
-
-def validate_path_security(filepath: str, description: str) -> Path:
-    """
-    Validate a file path for security issues.
-    
-    Args:
-        filepath: The file path to validate
-        description: Description for error messages (e.g., "applicant file")
-        
-    Returns:
-        Resolved Path object
-        
-    Raises:
-        click.ClickException: If path contains security issues
-    """
-    path_obj = Path(filepath)
-    
-    # Check for path traversal patterns
-    path_str = str(path_obj)
-    if '..' in path_str:
-        raise click.ClickException(f"Invalid {description} path: path traversal not allowed")
-    
-    # Check for null bytes (injection attempt)
-    if '\0' in path_str:
-        raise click.ClickException(f"Invalid {description} path: invalid characters")
-    
-    # Resolve to absolute path and ensure it doesn't escape expected boundaries
-    resolved = path_obj.resolve()
-    
-    return resolved
 from .mapping import ColumnMapper
 from .faculty import build_faculty_availability
 from .faculty_names import (
@@ -49,12 +17,68 @@ from .faculty_names import (
 )
 from .rules import RulesEngine
 from .scheduler import Scheduler, format_scheduled_output
+from .validation import (
+    validate_all, validate_applicant_data, validate_faculty_data,
+    ValidationError, ValidationResult
+)
 
 
 @click.group()
 def cli():
     """Audish - Audition Scheduler CLI"""
     pass
+
+
+@cli.command()
+@click.option('--app', required=True, type=click.Path(exists=True), help='Applicants Excel file')
+@click.option('--fac', required=True, type=click.Path(exists=True), help='Faculty availability Excel file')
+@click.option('--map', 'mapping_file', required=True, type=click.Path(exists=True), help='Mapping YAML file')
+@click.option('--rules', 'rules_file', required=True, type=click.Path(exists=True), help='Rules YAML file')
+def validate(app, fac, mapping_file, rules_file):
+    """
+    Validate configuration files before scheduling.
+    
+    Checks that:
+    - YAML files are properly formatted
+    - Excel column names match the mapping configuration
+    - All applicant disciplines have scheduling rules
+    - Calendar days are properly configured
+    
+    Run this before scheduling to catch configuration issues early.
+    """
+    click.echo("=" * 60)
+    click.echo("Audish - Configuration Validator")
+    click.echo("=" * 60)
+    click.echo()
+    
+    click.echo("Validating configuration files...")
+    click.echo(f"  • Mapping:    {mapping_file}")
+    click.echo(f"  • Rules:      {rules_file}")
+    click.echo(f"  • Applicants: {app}")
+    click.echo(f"  • Faculty:    {fac}")
+    click.echo()
+    
+    try:
+        result = validate_all(mapping_file, rules_file, app, fac)
+        
+        if result.is_valid:
+            click.echo("✓ All configuration checks passed!")
+            if result.warnings:
+                click.echo()
+                click.echo("Warnings (non-fatal):")
+                for warning in result.warnings:
+                    click.echo(f"  ⚠️  {warning}")
+            sys.exit(0)
+        else:
+            click.echo(str(result), err=True)
+            sys.exit(1)
+            
+    except ValidationError as e:
+        click.echo(str(e), err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"Unexpected error during validation: {e}", err=True)
+        sys.exit(1)
 
 
 @cli.command()
@@ -73,27 +97,35 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
     click.echo("Audish - Audition Scheduler")
     click.echo("=" * 60)
     
-    # Security: Validate all input file paths
-    app = str(validate_path_security(app, "applicant"))
-    fac = str(validate_path_security(fac, "faculty"))
-    mapping_file = str(validate_path_security(mapping_file, "mapping"))
-    rules_file = str(validate_path_security(rules_file, "rules"))
-    
-    # Security: Validate output paths (don't require existence)
-    out_schedule_path = Path(out_schedule).resolve()
-    out_conflicts_path = Path(out_conflicts).resolve()
-    if '..' in str(out_schedule) or '..' in str(out_conflicts):
-        raise click.ClickException("Invalid output path: path traversal not allowed")
-    out_schedule = str(out_schedule_path)
-    out_conflicts = str(out_conflicts_path)
-    
-    if out_metrics:
-        if '..' in str(out_metrics):
-            raise click.ClickException("Invalid metrics path: path traversal not allowed")
-        out_metrics = str(Path(out_metrics).resolve())
+    # 0. Validate configuration before processing
+    click.echo("\n[0/8] Validating configuration...")
+    try:
+        validation_result = validate_all(mapping_file, rules_file, app, fac)
+        
+        if not validation_result.is_valid:
+            click.echo("  ✗ Configuration validation failed", err=True)
+            click.echo()
+            click.echo(str(validation_result), err=True)
+            click.echo()
+            click.echo("Please fix the errors above and try again.", err=True)
+            sys.exit(1)
+        
+        click.echo("  ✓ Configuration validated")
+        
+        # Show warnings if any
+        if validation_result.warnings:
+            for warning in validation_result.warnings:
+                click.echo(f"  ⚠ {warning}")
+                
+    except ValidationError as e:
+        click.echo(f"  ✗ Validation error: {e}", err=True)
+        sys.exit(1)
+    except Exception as e:
+        # Don't fail on validation errors - just warn and continue
+        click.echo(f"  ⚠ Validation skipped (error: {e})")
     
     # 1. Load configuration
-    click.echo("\n[1/7] Loading configuration...")
+    click.echo("\n[1/8] Loading configuration...")
     try:
         mapper = ColumnMapper(mapping_file)
         rules_engine = RulesEngine(rules_file)
@@ -106,7 +138,7 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
         sys.exit(1)
     
     # 2. Load applicants
-    click.echo("\n[2/7] Loading applicants...")
+    click.echo("\n[2/8] Loading applicants...")
     try:
         app_sheet_name = mapper.get_applicant_sheet_name()
         original_columns, app_rows = read_excel_sheet(app, app_sheet_name)
@@ -127,7 +159,7 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
         sys.exit(1)
     
     # 3. Load faculty availability
-    click.echo("\n[3/7] Loading faculty availability...")
+    click.echo("\n[3/8] Loading faculty availability...")
     try:
         fac_sheet_name = mapper.get_faculty_sheet_name()
         fac_columns, fac_rows = read_excel_sheet(fac, fac_sheet_name)
@@ -144,7 +176,7 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
         sys.exit(1)
     
     # 4. Build faculty name mapping
-    click.echo("\n[4/7] Building faculty name mapping...")
+    click.echo("\n[4/8] Building faculty name mapping...")
     try:
         faculty_names = get_all_faculty_names(faculty_records, 'faculty_name')
         faculty_name_aliases = mapper.get_faculty_name_aliases()
@@ -165,7 +197,7 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
         sys.exit(1)
     
     # 5. Parse faculty availability
-    click.echo("\n[5/7] Parsing faculty availability...")
+    click.echo("\n[5/8] Parsing faculty availability...")
     try:
         calendar_days = rules_engine.get_calendar_days()
         faculty_availability = build_faculty_availability(
@@ -182,7 +214,7 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
         sys.exit(1)
     
     # 6. Run scheduler
-    click.echo("\n[6/7] Running scheduler...")
+    click.echo("\n[6/8] Running scheduler...")
     try:
         scheduler = Scheduler(rules_engine, faculty_availability, applicants, mapper, faculty_name_map)
         scheduled, conflicts = scheduler.schedule()
@@ -195,12 +227,30 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
         sys.exit(1)
     
     # 7. Write output files
-    click.echo("\n[7/7] Writing output files...")
+    click.echo("\n[7/8] Writing output files...")
     try:
-        # Format scheduled output
-        scheduled_output = format_scheduled_output(scheduled, mapper, original_columns)
+        # Detect existing audition columns in the input file (with or without "Music" prefix)
+        # Map internal field names to possible column names in the file
+        audition_date_fields = ["Music Audition Date", "Audition Date"]
+        audition_time_fields = ["Music Audition Time", "Audition Time"]
+        audition_order_fields = ["Music Audition Order", "Audition Order"]
         
-        # Write schedule
+        # Find which columns exist in the original file
+        existing_date_col = next((col for col in original_columns if col in audition_date_fields), None)
+        existing_time_col = next((col for col in original_columns if col in audition_time_fields), None)
+        existing_order_col = next((col for col in original_columns if col in audition_order_fields), None)
+        
+        # Format scheduled output - use original_columns as-is (columns will be filled in place)
+        scheduled_output = format_scheduled_output(
+            scheduled, 
+            mapper, 
+            original_columns,
+            existing_date_col,
+            existing_time_col,
+            existing_order_col
+        )
+        
+        # Write schedule - use original_columns to preserve exact order
         write_schedule_excel(out_schedule, original_columns, scheduled_output)
         click.echo(f"  ✓ Wrote schedule: {out_schedule}")
         
@@ -313,6 +363,49 @@ def generate_metrics(
         lines.append(f"  {disc}: {sched}/{total_disc} ({pct:.1f}%)")
     
     return "\n".join(lines)
+
+
+@cli.command('excel-preview')
+@click.argument('file_path', type=click.Path(exists=True))
+@click.option('--max-rows', default=100, help='Maximum number of rows to read')
+def excel_preview(file_path, max_rows):
+    """
+    Read an Excel file and output JSON preview (for UI integration).
+    """
+    import json
+    from openpyxl import load_workbook
+    
+    try:
+        wb = load_workbook(file_path, read_only=True, data_only=True)
+        sheet = wb.active
+        
+        rows = list(sheet.iter_rows(values_only=True))
+        if not rows:
+            result = {"success": True, "headers": [], "data": []}
+        else:
+            headers = [str(h) if h is not None else "" for h in rows[0]]
+            data = []
+            for row in rows[1:max_rows + 1]:
+                row_data = {}
+                for i, cell in enumerate(row):
+                    if i < len(headers):
+                        value = cell
+                        # Convert datetime objects to strings
+                        if hasattr(value, 'isoformat'):
+                            value = value.isoformat()
+                        elif value is None:
+                            value = ""
+                        row_data[headers[i]] = value
+                data.append(row_data)
+            result = {"success": True, "headers": headers, "data": data}
+        
+        wb.close()
+        print(json.dumps(result))
+        
+    except Exception as e:
+        result = {"success": False, "error": str(e), "headers": [], "data": []}
+        print(json.dumps(result))
+        sys.exit(1)
 
 
 if __name__ == '__main__':

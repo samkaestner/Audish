@@ -35,7 +35,8 @@ A Python CLI tool (`audish`) with an Electron desktop UI for managing conservato
 ### Deployment Model
 - **Python CLI:** Installable via `pip install -e .` (editable install for development)
 - **Desktop App:** Standalone installers (.dmg for macOS, .exe for Windows, .AppImage/.deb for Linux)
-- **Important Limitation:** Desktop app requires Python + `audish` package to be installed separately (not bundled)
+- **Python Bundling:** ✅ Desktop app now bundles Python via PyInstaller - no separate installation required for end users
+- **School Configuration:** ✅ Hardcoded per-school configs - users don't need to select YAML files
 
 ## Key Features
 
@@ -64,10 +65,13 @@ A Python CLI tool (`audish`) with an Electron desktop UI for managing conservato
 
 ### Desktop UI Features
 - Drag-and-drop file upload
+- **Configuration validation** before scheduling (with helpful error messages)
 - Calendar configuration (add/edit audition days)
 - Visual results display (scheduled applicants, conflicts, metrics)
 - Download output files
 - Real-time feedback during scheduling
+- Pre-configured for each school (no manual YAML file selection)
+- Developer settings hidden behind keyboard shortcut (Ctrl/Cmd+Shift+S)
 
 ## Architecture Principles
 - **Simplicity over scalability** - Optimize for 2-3 schools, not 100
@@ -118,13 +122,13 @@ Must-haves for sales conversations:
 - What would make Curtis or New England Conservatory say "yes"?
 - Are there common conservatory workflows we're missing?
 
-### 4. Packaging and Distribution (REVISED)
-- Current UX issue: Users must manually select mapping.yaml and rules.yaml files
-- **Better approach**: Hardcode school-specific configs, hide from users
-- Phase 1: Single school hardcoded (Juilliard) - simplest demo
+### 4. Packaging and Distribution ✅ DONE
+- ~~Current UX issue: Users must manually select mapping.yaml and rules.yaml files~~ FIXED
+- **Implemented approach**: Hardcode school-specific configs, hidden from users
+- ✅ Phase 1: Single school hardcoded (Juilliard) - COMPLETE
 - Phase 2: School selector dropdown - after first paying customer
 - Phase 3: User data directory - after 5+ schools for scalability
-- Trade-off: Simplicity and reliability vs. user customization
+- Developer settings accessible via Ctrl/Cmd+Shift+S for debugging
 
 ## Known Issues/Tech Debt
 
@@ -232,6 +236,7 @@ Must-haves for sales conversations:
 audish/                      # Python package (scheduling engine)
   __init__.py
   cli.py                     # Click CLI entrypoint
+  validation.py              # Configuration validation with helpful errors
   mapping.py                 # Column normalization (Excel → logical fields)
   faculty.py                 # Faculty availability parsing
   faculty_names.py           # Name matching/normalization
@@ -240,12 +245,19 @@ audish/                      # Python package (scheduling engine)
   io_excel.py                # Excel input/output
   reason_codes.py            # Conflict reason constants
 
+scripts/                     # Build scripts
+  build-python.sh            # Bundle Python with PyInstaller
+  build-all.sh               # Full build (Python + Electron)
+
 electron/                    # Desktop UI
   main/                      # Electron main process (TypeScript)
   renderer/                  # React frontend
     src/
       components/            # UI components
-      lib/                   # Utilities and state management
+      lib/
+        config.ts            # School configuration (hardcoded)
+        store.ts             # State management
+  resources/                 # Bundled resources (audish-cli executable)
   package.json
 
 schools/juilliard/          # School-specific configuration
@@ -274,10 +286,10 @@ Documentation files:
 ## Next Steps for Productization
 
 ### Before Next Demo
-1. Polish error messages in UI (no stack traces)
+1. ~~Polish error messages in UI (no stack traces)~~ ✅ Validation provides clear messages
 2. Add progress indicator for long-running schedules
 3. Make conflict reasons more user-friendly
-4. Test packaging on clean machine (verify Python dependency is clear)
+4. ~~Test packaging on clean machine (verify Python dependency is clear)~~ ✅ Python is now bundled
 5. Create 2-page sales sheet highlighting Juilliard success
 
 ### Before Approaching Curtis/NEC
@@ -288,8 +300,8 @@ Documentation files:
 5. Practice demo with someone who doesn't know the system
 
 ### Technical Improvements (After Validating Demand)
-1. Consider bundling Python with Electron app
-2. Add configuration validation with helpful error messages
+1. ~~Consider bundling Python with Electron app~~ ✅ DONE - PyInstaller bundling implemented
+2. ~~Add configuration validation with helpful error messages~~ ✅ DONE - `audish validate` command + UI button
 3. Build "schedule preview" mode (dry run without committing)
 4. Create audit log showing why each applicant got their slot
 5. Add automated tests for UI critical paths

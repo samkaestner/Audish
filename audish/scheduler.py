@@ -4,7 +4,7 @@ Implements greedy assignment with constraints, conflict tracking, and numbering.
 """
 
 from typing import List, Dict, Any, Optional, Tuple, Set
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from collections import defaultdict
 import copy
 
@@ -41,6 +41,9 @@ class Scheduler:
         self.mapper = mapper
         self.faculty_name_map = faculty_name_map
         
+        # Check if registration date field is configured in mapping
+        self.registration_date_field = self._check_registration_date_field()
+        
         # Scheduling state
         self.scheduled: List[Dict[str, Any]] = []
         self.conflicts: List[Dict[str, Any]] = []
@@ -68,6 +71,9 @@ class Scheduler:
         # Number auditions per discipline across all days
         self._number_auditions()
         
+        # Validate registration dates and flag conflicts
+        self._validate_registration_dates()
+        
         return self.scheduled, self.conflicts
     
     def _schedule_discipline(self, discipline: str, applicants: List[Dict[str, Any]]) -> None:
@@ -88,9 +94,18 @@ class Scheduler:
                 'num_valid': len(valid_slots)
             })
         
-        # Order applicants by: degree precedence → fewest valid slots → stable ID
+        # Order applicants by: degree precedence → Juilliard students first → fewest valid slots → stable ID
+        # This ensures current Juilliard students are grouped together within each degree
+        def is_current_juilliard(applicant: Dict[str, Any]) -> int:
+            """Return 0 for Juilliard students (first), 1 for external (second)."""
+            juilliard_status = applicant.get('juilliard_status', '')
+            if juilliard_status and 'juilliard' in str(juilliard_status).lower():
+                return 0  # Juilliard students scheduled first
+            return 1  # External students scheduled after
+        
         applicant_slots.sort(key=lambda x: (
             self.rules.get_degree_rank(x['applicant'].get('degree', '')),
+            is_current_juilliard(x['applicant']),
             x['num_valid'],
             x['applicant'].get('id', '')
         ))
@@ -136,9 +151,57 @@ class Scheduler:
                     break
             
             if not assigned:
-                # Add to conflicts
-                reason = reason_codes.NO_VALID_SLOTS if not valid_slots else reason_codes.CAPACITY_EXCEEDED
-                self._add_conflict(applicant, reason, "No available slots matching all constraints")
+                # Check if registration date is missing - only flag if registration date field is configured
+                if self.registration_date_field:
+                    registration_date_str = self._parse_registration_date(applicant)
+                    if registration_date_str is None:
+                        self._add_conflict(
+                            applicant,
+                            reason_codes.REGISTRATION_DATE_MISSING,
+                            "Registration date is missing from applicant data - cannot schedule"
+                        )
+                        continue
+                
+                # Determine conflict reason
+                teacher1 = applicant.get('teacher1')
+                teacher2 = applicant.get('teacher2')
+                teacher3 = applicant.get('teacher3')
+                has_teacher_preferences = bool(teacher1 or teacher2 or teacher3)
+                degree = applicant.get('degree', 'MM')
+                
+                if not valid_slots:
+                    # Check if it's because no teachers are available
+                    if has_teacher_preferences:
+                        # Check if any day has teacher availability
+                        has_any_teacher_availability = False
+                        for day in self.rules.get_calendar_days():
+                            date_str = day['date'] if isinstance(day['date'], str) else day['date'].strftime('%Y-%m-%d')
+                            # Generate a sample slot to check teacher availability
+                            sample_slots = self.rules.generate_slots(discipline, degree, date_str, applicant_count=1)
+                            if sample_slots:
+                                sample_start = sample_slots[0][0]
+                                teacher_rank = self._check_teacher_presence(
+                                    teacher1, teacher2, teacher3, date_str, sample_start
+                                )
+                                if teacher_rank > 0:
+                                    has_any_teacher_availability = True
+                                    break
+                        
+                        if not has_any_teacher_availability:
+                            reason = reason_codes.TEACHER_UNAVAILABLE
+                            teacher_list = [t for t in [teacher1, teacher2, teacher3] if t]
+                            details = f"None of the preferred teachers ({', '.join(teacher_list)}) are available on any scheduled day"
+                        else:
+                            reason = reason_codes.NO_VALID_SLOTS
+                            details = "No available slots matching all constraints"
+                    else:
+                        reason = reason_codes.NO_VALID_SLOTS
+                        details = "No available slots matching all constraints"
+                else:
+                    reason = reason_codes.CAPACITY_EXCEEDED
+                    details = "All available slots at capacity"
+                
+                self._add_conflict(applicant, reason, details)
     
     def _compute_valid_slots(
         self,
@@ -163,11 +226,23 @@ class Scheduler:
         teacher2 = applicant.get('teacher2')
         teacher3 = applicant.get('teacher3')
         
+        # Check if applicant has any teacher preferences
+        has_teacher_preferences = bool(teacher1 or teacher2 or teacher3)
+        
+        # Get registration date if present and configured
+        registration_date_str = None
+        if self.registration_date_field:
+            registration_date_str = self._parse_registration_date(applicant)
+        
         valid_slots = []
         
         # Generate slots for each calendar day
         for day in self.rules.get_calendar_days():
             date_str = day['date'] if isinstance(day['date'], str) else day['date'].strftime('%Y-%m-%d')
+            
+            # If applicant has a registration date, only consider slots on that date
+            if registration_date_str and date_str != registration_date_str:
+                continue
             
             # Generate slots for this discipline/degree/day
             slots = self.rules.generate_slots(discipline, degree, date_str, applicant_count=100)
@@ -179,6 +254,12 @@ class Scheduler:
                 )
                 
                 # Apply teacher presence policy
+                # If applicant has teacher preferences, they should only be scheduled
+                # on days when at least one preferred teacher is available
+                if has_teacher_preferences and teacher_rank == 0:
+                    continue  # No preferred teacher available, skip slot
+                
+                # For "require" policy, also filter if no teacher (redundant with above when has preferences)
                 if self.rules.teacher_presence_policy == 'require' and teacher_rank == 0:
                     continue  # No preferred teacher available, skip slot
                 
@@ -297,6 +378,23 @@ class Scheduler:
         if slot_key in self.slot_assignments:
             return False
         
+        # Validate teacher availability: if applicant has teacher preferences,
+        # ensure at least one preferred teacher is available for this slot
+        teacher1 = applicant.get('teacher1')
+        teacher2 = applicant.get('teacher2')
+        teacher3 = applicant.get('teacher3')
+        has_teacher_preferences = bool(teacher1 or teacher2 or teacher3)
+        
+        if has_teacher_preferences:
+            # Re-check teacher presence for this specific slot as a safety validation
+            teacher_rank = self._check_teacher_presence(
+                teacher1, teacher2, teacher3, date_str, start_time
+            )
+            if teacher_rank == 0:
+                # This should not happen if _compute_valid_slots worked correctly,
+                # but we validate here as a safety check
+                return False
+        
         # Check same-school spacing if enabled
         if self.rules.same_school_spacing:
             if not self._check_same_school_spacing(applicant, discipline, date_str, start_time):
@@ -312,7 +410,10 @@ class Scheduler:
         # Add to scheduled list
         scheduled_record = copy.deepcopy(applicant)
         scheduled_record['Music Audition Date'] = date_str
-        scheduled_record['Music Audition Time'] = start_time.strftime('%H:%M')
+        # Format time as 12-hour with AM/PM (e.g., "9:00 AM", "2:30 PM")
+        # %I produces 01-12, so remove leading zero from hour for single-digit hours
+        time_str = start_time.strftime('%I:%M %p').lstrip('0')
+        scheduled_record['Music Audition Time'] = time_str
         scheduled_record['_discipline'] = discipline
         scheduled_record['_teacher_rank'] = slot_info['teacher_rank']
         self.scheduled.append(scheduled_record)
@@ -361,8 +462,13 @@ class Scheduler:
                 continue
             
             try:
-                scheduled_hour, scheduled_min = map(int, scheduled_time_str.split(':'))
-                scheduled_datetime = slot_start.replace(hour=scheduled_hour, minute=scheduled_min)
+                # Parse time string (supports both 24-hour "HH:MM" and 12-hour "H:MM AM/PM")
+                from .faculty import parse_time
+                time_obj = parse_time(scheduled_time_str)
+                if time_obj:
+                    scheduled_datetime = slot_start.replace(hour=time_obj.hour, minute=time_obj.minute)
+                else:
+                    continue
             except (ValueError, AttributeError):
                 continue
             
@@ -420,12 +526,171 @@ class Scheduler:
             # Assign sequential numbers
             for order, record in enumerate(records, start=1):
                 record['Music Audition Order'] = order
+    
+    def _check_registration_date_field(self) -> Optional[str]:
+        """
+        Check if registration date field is configured in the mapping.
+        
+        Returns:
+            Field name if configured, None otherwise
+        """
+        date_fields = [
+            'registration_date',
+            'event_date',
+            'event_registration_date',
+            'registered_date',
+            'audition_date',
+        ]
+        
+        for field in date_fields:
+            if self.mapper.get_applicant_column(field):
+                return field
+        
+        return None
+    
+    def _parse_registration_date(self, applicant: Dict[str, Any]) -> Optional[str]:
+        """
+        Parse registration date from applicant data.
+        
+        Looks for common field names like 'registration_date', 'event_date', etc.
+        Supports multiple date formats.
+        
+        Args:
+            applicant: Normalized applicant dict
+            
+        Returns:
+            Date string in YYYY-MM-DD format, or None if not found
+        """
+        # Check various possible field names for registration date
+        date_fields = [
+            'registration_date',
+            'event_date',
+            'event_registration_date',
+            'registered_date',
+            'audition_date',
+        ]
+        
+        for field in date_fields:
+            date_value = applicant.get(field)
+            if not date_value:
+                continue
+            
+            # Try to parse various date formats
+            if isinstance(date_value, datetime):
+                return date_value.strftime('%Y-%m-%d')
+            elif isinstance(date_value, date):
+                return date_value.strftime('%Y-%m-%d')
+            elif isinstance(date_value, str):
+                date_value = date_value.strip()
+                if not date_value:
+                    continue
+                
+                # Try common date formats
+                formats = [
+                    '%Y-%m-%d',      # 2025-02-28
+                    '%m/%d/%Y',      # 2/28/2025
+                    '%m-%d-%Y',      # 2-28-2025
+                    '%Y/%m/%d',      # 2025/02/28
+                ]
+                
+                for fmt in formats:
+                    try:
+                        dt = datetime.strptime(date_value, fmt)
+                        return dt.strftime('%Y-%m-%d')
+                    except ValueError:
+                        continue
+        
+        return None
+    
+    def _validate_registration_dates(self) -> None:
+        """
+        Validate that scheduled applicants match their registration dates.
+        Move mismatched applicants to conflicts.
+        """
+        # Create lookup for applicants by ID
+        applicant_lookup = {app.get('id'): app for app in self.applicants}
+        
+        # Check each scheduled applicant
+        to_remove = []
+        for scheduled_record in self.scheduled:
+            applicant_id = scheduled_record.get('id')
+            if not applicant_id:
+                continue
+            
+            applicant = applicant_lookup.get(applicant_id)
+            if not applicant:
+                continue
+            
+            # Only validate registration dates if the field is configured
+            if not self.registration_date_field:
+                continue
+            
+            # Get registration date
+            registration_date_str = self._parse_registration_date(applicant)
+            scheduled_date_str = scheduled_record.get('Music Audition Date')
+            
+            # Check if registration date is missing
+            # Note: This should have been caught before scheduling, but we check again
+            # as a safety measure in case someone was scheduled despite missing registration date
+            if registration_date_str is None:
+                to_remove.append(scheduled_record)
+                # Only add conflict if not already in conflicts (avoid duplicates)
+                conflict_exists = any(
+                    c.get('ApplicantID') == applicant_id and 
+                    c.get('ReasonCode') == reason_codes.REGISTRATION_DATE_MISSING
+                    for c in self.conflicts
+                )
+                if not conflict_exists:
+                    self._add_conflict(
+                        applicant,
+                        reason_codes.REGISTRATION_DATE_MISSING,
+                        "Registration date is missing from applicant data"
+                    )
+                continue
+            
+            # Check if scheduled date matches registration date
+            if scheduled_date_str != registration_date_str:
+                to_remove.append(scheduled_record)
+                self._add_conflict(
+                    applicant,
+                    reason_codes.REGISTRATION_DATE_MISMATCH,
+                    f"Assigned date {scheduled_date_str} does not match registration date {registration_date_str}"
+                )
+                # Remove from slot assignments
+                discipline = scheduled_record.get('_discipline', '')
+                time_str = scheduled_record.get('Music Audition Time', '')
+                if discipline and scheduled_date_str and time_str:
+                    try:
+                        # Parse time to get datetime
+                        from .faculty import parse_time
+                        time_obj = parse_time(time_str)
+                        if time_obj:
+                            scheduled_datetime = datetime.strptime(scheduled_date_str, '%Y-%m-%d').replace(
+                                hour=time_obj.hour, minute=time_obj.minute
+                            )
+                            slot_key = (discipline, scheduled_date_str, scheduled_datetime)
+                            if slot_key in self.slot_assignments:
+                                del self.slot_assignments[slot_key]
+                    except (ValueError, AttributeError):
+                        pass
+                
+                # Remove from applicant_slots
+                if applicant_id in self.applicant_slots:
+                    del self.applicant_slots[applicant_id]
+        
+        # Remove mismatched records from scheduled list
+        for record in to_remove:
+            if record in self.scheduled:
+                self.scheduled.remove(record)
 
 
 def format_scheduled_output(
     scheduled: List[Dict[str, Any]],
     mapper: Any,
-    original_columns: List[str]
+    original_columns: List[str],
+    existing_date_col: Optional[str] = None,
+    existing_time_col: Optional[str] = None,
+    existing_order_col: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Format scheduled applicants for Excel output.
@@ -433,21 +698,47 @@ def format_scheduled_output(
     Args:
         scheduled: List of scheduled applicant dicts
         mapper: ColumnMapper instance
-        original_columns: Original column names from input
+        original_columns: Original column names from input (preserves order)
+        existing_date_col: Name of existing date column in input (if any)
+        existing_time_col: Name of existing time column in input (if any)
+        existing_order_col: Name of existing order column in input (if any)
         
     Returns:
-        List of dicts ready for Excel output
+        List of dicts ready for Excel output, with columns in original_columns order
     """
     output = []
     
+    # Internal field names used by the scheduler
+    internal_date = 'Music Audition Date'
+    internal_time = 'Music Audition Time'
+    internal_order = 'Music Audition Order'
+    
     for record in scheduled:
-        # Start with denormalized original data
-        row = mapper.denormalize_applicant(record)
+        # Get denormalized data (may not be in correct order)
+        denormalized = mapper.denormalize_applicant(record)
         
-        # Add scheduling fields
-        row['Music Audition Date'] = record.get('Music Audition Date', '')
-        row['Music Audition Time'] = record.get('Music Audition Time', '')
-        row['Music Audition Order'] = record.get('Music Audition Order', '')
+        # Build row dict in the exact order of original_columns
+        # This ensures output columns match input column order exactly
+        row = {}
+        for col_name in original_columns:
+            # If this column is one of the audition columns, fill it with scheduled data
+            if col_name == existing_date_col:
+                row[col_name] = record.get(internal_date, "")
+            elif col_name == existing_time_col:
+                row[col_name] = record.get(internal_time, "")
+            elif col_name == existing_order_col:
+                row[col_name] = record.get(internal_order, "")
+            else:
+                # Use value from denormalized data
+                row[col_name] = denormalized.get(col_name, "")
+        
+        # Only add scheduling fields at the end if they don't already exist in original_columns
+        if not existing_date_col:
+            row[internal_date] = record.get(internal_date, '')
+        if not existing_time_col:
+            row[internal_time] = record.get(internal_time, '')
+        if not existing_order_col:
+            row[internal_order] = record.get(internal_order, '')
         
         output.append(row)
     
