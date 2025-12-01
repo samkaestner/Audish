@@ -37,10 +37,13 @@ export default function CalendarConfig() {
     if (!window.electronAPI) return;
     
     try {
-      const projectRoot = await window.electronAPI.getProjectRoot();
+      // Use getSchoolsDir for bundled config files (works in both dev and packaged mode)
+      const schoolsDir = await window.electronAPI.getSchoolsDir();
+      // rulesFile is relative like 'schools/juilliard/rules.yaml', extract the part after 'schools/'
+      const rulesRelativePath = rulesFile.replace(/^schools\//, '');
       const rulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/) 
         ? rulesFile 
-        : `${projectRoot}/${rulesFile}`;
+        : `${schoolsDir}/${rulesRelativePath}`;
       
       const fileResult = await window.electronAPI.readFile(rulesPath);
       if (fileResult.success && fileResult.content) {
@@ -122,15 +125,19 @@ export default function CalendarConfig() {
     clearValidation();
 
     try {
-      const projectRoot = await window.electronAPI.getProjectRoot();
+      const schoolsDir = await window.electronAPI.getSchoolsDir();
+      
+      // Build paths using schoolsDir for bundled config files
+      const mappingRelPath = mappingFile.replace(/^schools\//, '');
+      const rulesRelPath = rulesFile.replace(/^schools\//, '');
       
       const mappingPath = mappingFile.startsWith('/') || mappingFile.match(/^[A-Z]:/)
         ? mappingFile
-        : `${projectRoot}/${mappingFile}`;
+        : `${schoolsDir}/${mappingRelPath}`;
       
       const rulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/)
         ? rulesFile
-        : `${projectRoot}/${rulesFile}`;
+        : `${schoolsDir}/${rulesRelPath}`;
 
       const result = await window.electronAPI.validateConfig({
         applicantFile,
@@ -171,15 +178,19 @@ export default function CalendarConfig() {
 
     try {
       // Create temporary rules file with updated calendar
-      const projectRoot = await window.electronAPI.getProjectRoot();
+      const schoolsDir = await window.electronAPI.getSchoolsDir();
+      const userDataDir = await window.electronAPI.getUserDataDir();
+      
+      // Build path for reading bundled rules
+      const rulesRelPath = rulesFile.replace(/^schools\//, '');
       const originalRulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/)
         ? rulesFile
-        : `${projectRoot}/${rulesFile}`;
+        : `${schoolsDir}/${rulesRelPath}`;
       
       const fileResult = await window.electronAPI.readFile(originalRulesPath);
       
       if (!fileResult.success) {
-        throw new Error('Failed to read rules file');
+        throw new Error(`Failed to read rules file: ${fileResult.error || 'Unknown error'}`);
       }
 
       // Use custom schema to prevent automatic date parsing
@@ -187,19 +198,21 @@ export default function CalendarConfig() {
       const rules = yaml.load(fileResult.content || '', { schema }) as any;
       rules.calendar = { days: calendarDays };
       
-      // Write temporary rules file
-      const tempRulesPath = `${projectRoot}/temp_rules.yaml`;
+      // Write temporary rules file to user data directory (writable in both dev and packaged mode)
+      const tempRulesPath = `${userDataDir}/temp_rules.yaml`;
       const writeResult = await window.electronAPI.writeFile(tempRulesPath, yaml.dump(rules));
       if (!writeResult.success) {
-        throw new Error('Failed to write temporary rules file');
+        throw new Error(`Failed to write temporary rules file: ${writeResult.error || 'Unknown error'}`);
       }
 
-      // Get output directory
-      const outputDir = `${projectRoot}/output`;
+      // Get output directory (use user data dir which is writable)
+      const outputDir = `${userDataDir}/output`;
       
+      // Build mapping path using schoolsDir for bundled config
+      const mappingRelPath = mappingFile.replace(/^schools\//, '');
       const mappingPath = mappingFile.startsWith('/') || mappingFile.match(/^[A-Z]:/)
         ? mappingFile
-        : `${projectRoot}/${mappingFile}`;
+        : `${schoolsDir}/${mappingRelPath}`;
       
       const result = await window.electronAPI.runScheduler({
         applicantFile,

@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import * as path from 'path';
-import { spawn, SpawnOptionsWithoutStdio } from 'child_process';
+import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import * as security from './security';
 
 let mainWindow: BrowserWindow | null = null;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -61,6 +62,18 @@ function getProjectRoot(): string {
   return path.resolve(__dirname, '../../');
 }
 
+/**
+ * Get a writable directory for temp files and output.
+ * In packaged mode: Uses the app's user data directory
+ * In development mode: Uses the project root
+ */
+function getUserDataDir(): string {
+  if (app.isPackaged) {
+    return app.getPath('userData');
+  }
+  return getProjectRoot();
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -86,6 +99,16 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Register bundled/default config directories as allowed paths
+  const schoolsDir = getSchoolsDir();
+  security.registerUserSelectedFolder(schoolsDir);
+  console.log(`[security] Registered schools directory: ${schoolsDir}`);
+  
+  // Register user data directory for temp files and output
+  const userDataDir = getUserDataDir();
+  security.registerUserSelectedFolder(userDataDir);
+  console.log(`[security] Registered user data directory: ${userDataDir}`);
+
   createWindow();
 
   app.on('activate', () => {
@@ -107,14 +130,34 @@ ipcMain.handle('select-file', async (_, options: { filters?: { name: string; ext
     properties: ['openFile'],
     filters: options.filters || [{ name: 'All Files', extensions: ['*'] }],
   });
-  return result.canceled ? null : result.filePaths[0];
+  if (!result.canceled && result.filePaths[0]) {
+    // Register user-selected file for security validation
+    security.registerUserSelectedFile(result.filePaths[0]);
+    return result.filePaths[0];
+  }
+  return null;
 });
 
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openDirectory'],
   });
-  return result.canceled ? null : result.filePaths[0];
+  if (!result.canceled && result.filePaths[0]) {
+    // Register user-selected folder for security validation
+    security.registerUserSelectedFolder(result.filePaths[0]);
+    return result.filePaths[0];
+  }
+  return null;
+});
+
+// Register a file from drag-drop (needs to be registered for security validation)
+ipcMain.handle('register-dropped-file', async (_, filePath: string) => {
+  if (filePath && typeof filePath === 'string') {
+    security.registerUserSelectedFile(filePath);
+    console.log(`[security] Registered dropped file: ${filePath}`);
+    return true;
+  }
+  return false;
 });
 
 ipcMain.handle('run-scheduler', async (_, config: {
@@ -125,6 +168,11 @@ ipcMain.handle('run-scheduler', async (_, config: {
   outputDir: string;
 }) => {
   return new Promise((resolve) => {
+    // Security: Register the output directory
+    if (config.outputDir) {
+      security.registerUserSelectedFolder(config.outputDir);
+    }
+    
     // Get the audish executable (bundled or system Python)
     const audish = getAudishExecutable();
     const projectRoot = getProjectRoot();
@@ -136,11 +184,10 @@ ipcMain.handle('run-scheduler', async (_, config: {
     // Ensure output directory exists
     fs.mkdir(config.outputDir, { recursive: true }).then(() => {
       // Build command arguments
-      // For bundled executable: audish-cli schedule --app ... 
-      // For system Python: python -m audish.cli schedule --app ...
       const args = [
-        ...audish.args,  // Empty for bundled, ['-m', 'audish.cli'] for system Python
+        ...audish.args,
         'schedule',
+        '--progress', // Enable machine-readable progress output
         '--app', config.applicantFile,
         '--fac', config.facultyFile,
         '--map', config.mappingFile,
@@ -163,8 +210,22 @@ ipcMain.handle('run-scheduler', async (_, config: {
       let stderr = '';
 
       schedulerProcess.stdout.on('data', (data) => {
-        stdout += data.toString();
-        console.log(`[audish stdout] ${data.toString().trim()}`);
+        const text = data.toString();
+        stdout += text;
+        console.log(`[audish stdout] ${text.trim()}`);
+        
+        // Parse progress events and send to renderer
+        const lines = text.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('PROGRESS:')) {
+            try {
+              const progress = JSON.parse(line.substring(9));
+              mainWindow?.webContents.send('scheduler-progress', progress);
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
       });
 
       schedulerProcess.stderr.on('data', (data) => {
@@ -185,10 +246,8 @@ ipcMain.handle('run-scheduler', async (_, config: {
             },
           });
         } else {
-          // Return error as result object instead of rejecting
           let errorMessage = stderr || stdout || `Process exited with code ${code}`;
           
-          // Provide helpful error messages for common issues
           if (!audish.useBundled && (stderr.includes('No module named') || stderr.includes('ModuleNotFoundError'))) {
             if (stderr.includes('audish')) {
               errorMessage = `Python module 'audish' not found.\n\nPlease install it by running:\n\n  pip install -e .\n\nfrom the project root directory.\n\nError details:\n${stderr || stdout}`;
@@ -202,38 +261,33 @@ ipcMain.handle('run-scheduler', async (_, config: {
             code,
             stdout,
             stderr,
-            error: errorMessage,
+            error: security.sanitizeErrorMessage(errorMessage),
           });
         }
       });
 
       schedulerProcess.on('error', (error: any) => {
-        // Return error as result object instead of rejecting
         let errorMessage = error.message || String(error);
         
-        // Provide helpful error messages for common issues
         if (error.code === 'ENOENT') {
           if (audish.useBundled) {
             errorMessage = `Bundled scheduler executable not found.\n\nThis is an internal error. Please reinstall the application.`;
           } else {
             errorMessage = `Python not found. Please install Python 3.8+ and ensure it's in your PATH.\n\nTried: ${audish.command}`;
           }
-        } else if (!audish.useBundled && (stderr.includes('No module named') || stderr.includes('ModuleNotFoundError'))) {
-          errorMessage = `Python module not found. Please install the audish package:\n\n  pip install -e .\n\n(from the project root directory)\n\nError details: ${stderr || errorMessage}`;
         }
         
         resolve({
           success: false,
-          error: errorMessage,
+          error: security.sanitizeErrorMessage(errorMessage),
           stdout,
           stderr,
         });
       });
     }).catch((error) => {
-      // Return error as result object instead of rejecting
       resolve({
         success: false,
-        error: error.message || String(error),
+        error: security.sanitizeErrorMessage(error),
       });
     });
   });
@@ -241,18 +295,58 @@ ipcMain.handle('run-scheduler', async (_, config: {
 
 ipcMain.handle('read-file', async (_, filePath: string) => {
   try {
+    // Security: Validate file path
+    const validation = security.validateFilePath(filePath, {
+      allowUserSelected: true,
+      allowOutputFolder: true,
+      allowedExtensions: ['.xlsx', '.xls', '.yaml', '.yml', '.txt'],
+      resourcesPath: process.resourcesPath,
+    });
+    
+    if (!validation.valid) {
+      console.warn(`[security] Blocked read-file attempt: ${validation.reason}`);
+      return { success: false, error: 'Access denied: ' + validation.reason };
+    }
+    
     const content = await fs.readFile(filePath, 'utf-8');
     return { success: true, content };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: security.sanitizeErrorMessage(error) };
   }
 });
 
 ipcMain.handle('file-exists', async (_, filePath: string) => {
-  return existsSync(filePath);
+  try {
+    // Security: Validate file path before checking existence
+    const validation = security.validateFilePath(filePath, {
+      allowUserSelected: true,
+      allowOutputFolder: true,
+      resourcesPath: process.resourcesPath,
+    });
+    
+    if (!validation.valid) {
+      return false;
+    }
+    
+    return existsSync(filePath);
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle('read-excel-preview', async (_, filePath: string, maxRows: number = 100) => {
+  // Security: Validate file path
+  const validation = security.validateFilePath(filePath, {
+    allowUserSelected: true,
+    allowOutputFolder: true,
+    allowedExtensions: ['.xlsx', '.xls'],
+  });
+  
+  if (!validation.valid) {
+    console.warn(`[security] Blocked read-excel-preview attempt: ${validation.reason}`);
+    return { success: false, error: 'Access denied: ' + validation.reason, data: [], headers: [] };
+  }
+
   return new Promise((resolve) => {
     const audish = getAudishExecutable();
     const projectRoot = getProjectRoot();
@@ -261,12 +355,10 @@ ipcMain.handle('read-excel-preview', async (_, filePath: string, maxRows: number
     let args: string[];
     
     if (audish.useBundled) {
-      // Use bundled executable with excel-preview subcommand
       command = audish.command;
       args = ['excel-preview', filePath, '--max-rows', maxRows.toString()];
       console.log('[excel-preview] Using bundled CLI');
     } else {
-      // Use system Python with the CLI module
       command = audish.command;
       args = [...audish.args, 'excel-preview', filePath, '--max-rows', maxRows.toString()];
       console.log('[excel-preview] Using system Python');
@@ -296,26 +388,38 @@ ipcMain.handle('read-excel-preview', async (_, filePath: string, maxRows: number
           resolve(result);
         } catch (e) {
           console.error('Failed to parse Excel preview JSON:', e, 'stdout:', stdout);
-          resolve({ success: false, error: `Failed to parse Excel data: ${e}`, data: [], headers: [] });
+          resolve({ success: false, error: 'Failed to parse Excel data', data: [], headers: [] });
         }
       } else {
         console.error('Excel preview failed:', { code, stderr, stdout, filePath });
-        resolve({ success: false, error: stderr || stdout || 'Failed to read Excel file', data: [], headers: [] });
+        resolve({ success: false, error: security.sanitizeErrorMessage(stderr || stdout || 'Failed to read Excel file'), data: [], headers: [] });
       }
     });
     
     excelProcess.on('error', (error) => {
-      resolve({ success: false, error: error.message, data: [], headers: [] });
+      resolve({ success: false, error: security.sanitizeErrorMessage(error), data: [], headers: [] });
     });
   });
 });
 
 ipcMain.handle('write-file', async (_, filePath: string, content: string) => {
   try {
+    // Security: Validate file path before writing
+    const validation = security.validateFilePath(filePath, {
+      allowUserSelected: false, // Don't allow writing to input files
+      allowOutputFolder: true,  // Only allow output folder
+      allowedExtensions: ['.yaml', '.yml', '.txt'],
+    });
+    
+    if (!validation.valid) {
+      console.warn(`[security] Blocked write-file attempt: ${validation.reason}`);
+      return { success: false, error: 'Access denied: ' + validation.reason };
+    }
+    
     await fs.writeFile(filePath, content, 'utf-8');
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: security.sanitizeErrorMessage(error) };
   }
 });
 
@@ -327,23 +431,61 @@ ipcMain.handle('get-schools-dir', async () => {
   return getSchoolsDir();
 });
 
+ipcMain.handle('get-user-data-dir', async () => {
+  return getUserDataDir();
+});
+
 ipcMain.handle('download-file', async (_, filePath: string) => {
   try {
+    // Security: Validate file path
+    const validation = security.validateFilePath(filePath, {
+      allowUserSelected: true,
+      allowOutputFolder: true,
+      allowedExtensions: ['.xlsx', '.txt'],
+    });
+    
+    if (!validation.valid) {
+      console.warn(`[security] Blocked download-file attempt: ${validation.reason}`);
+      return { success: false, error: 'Access denied: ' + validation.reason };
+    }
+    
     if (existsSync(filePath)) {
-      // Show save dialog
       const result = await dialog.showSaveDialog(mainWindow!, {
         defaultPath: path.basename(filePath),
       });
       
       if (!result.canceled && result.filePath) {
-        // Copy file to destination
         await fs.copyFile(filePath, result.filePath);
         return { success: true, path: result.filePath };
       }
     }
     return { success: false, error: 'File not found' };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: false, error: security.sanitizeErrorMessage(error) };
+  }
+});
+
+ipcMain.handle('open-file', async (_, filePath: string) => {
+  try {
+    // Security: Validate file path
+    const validation = security.validateFilePath(filePath, {
+      allowUserSelected: true,
+      allowOutputFolder: true,
+      allowedExtensions: ['.xlsx', '.txt'],
+    });
+    
+    if (!validation.valid) {
+      console.warn(`[security] Blocked open-file attempt: ${validation.reason}`);
+      return { success: false, error: 'Access denied: ' + validation.reason };
+    }
+    
+    if (existsSync(filePath)) {
+      await shell.openPath(filePath);
+      return { success: true };
+    }
+    return { success: false, error: 'File not found' };
+  } catch (error: any) {
+    return { success: false, error: security.sanitizeErrorMessage(error) };
   }
 });
 
@@ -358,7 +500,6 @@ ipcMain.handle('validate-config', async (_, config: {
     const audish = getAudishExecutable();
     const projectRoot = getProjectRoot();
     
-    // Build command arguments for validate command
     const args = [
       ...audish.args,
       'validate',
@@ -395,10 +536,9 @@ ipcMain.handle('validate-config', async (_, config: {
           message: stdout || 'All configuration checks passed!',
         });
       } else {
-        // Extract the error message from output
         const output = stdout || stderr;
         resolve({
-          success: true,  // The process ran successfully, but validation found issues
+          success: true,
           valid: false,
           message: output,
           errors: output,
@@ -410,9 +550,8 @@ ipcMain.handle('validate-config', async (_, config: {
       resolve({
         success: false,
         valid: false,
-        error: error.message || String(error),
+        error: security.sanitizeErrorMessage(error),
       });
     });
   });
 });
-

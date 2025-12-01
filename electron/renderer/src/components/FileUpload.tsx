@@ -35,17 +35,26 @@ export default function FileUpload() {
       );
 
       if (excelFile) {
-        // In Electron, we need to use the file path
-        // We rely on the fact that the Electron drag event might provide path
-        // But for now we trigger the dialog if drag/drop path access is restricted in renderer
-        // Or assume the store handles the path if we could get it. 
-        // Since we can't easily get full path from drop in renderer without some config,
-        // we will just open the dialog as a fallback or if possible use the mock.
-        // Re-triggering selection for safety in this demo context:
+        // In Electron, dropped files have a 'path' property with the full file path
+        // This is available because Electron extends the File object
+        const filePath = (excelFile as any).path;
+        
+        if (filePath && window.electronAPI) {
+          // Register the dropped file with the security module so it can be read
+          await window.electronAPI.registerDroppedFile(filePath);
+          
+          if (type === 'applicant') {
+            setApplicantFile(filePath);
+          } else {
+            setFacultyFile(filePath);
+          }
+        } else {
+          // Fallback to file dialog if path not available
         handleFileSelect(type);
+        }
       }
     },
-    [handleFileSelect]
+    [handleFileSelect, setApplicantFile, setFacultyFile]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
