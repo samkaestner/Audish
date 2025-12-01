@@ -14,16 +14,17 @@ import {
 } from 'lucide-react';
 
 interface Conflict {
-  name?: string;
+  applicantId?: string;
   discipline?: string;
   degree?: string;
-  reason?: string;
+  reasonCode?: string;
   details?: string;
 }
 
 export default function ResultsDisplay() {
   const { results, error } = useSchedulerStore();
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
+  const [totalConflicts, setTotalConflicts] = useState(0);
   const [loadingConflicts, setLoadingConflicts] = useState(false);
   const [showRawMetrics, setShowRawMetrics] = useState(false);
 
@@ -41,20 +42,23 @@ export default function ResultsDisplay() {
     try {
       const preview = await window.electronAPI.readExcelPreview(results.outputFiles.conflicts, 15);
       if (preview.success && preview.data && preview.headers) {
-        // Map headers to our conflict structure
+        // Store actual total count
+        setTotalConflicts(preview.total_rows || preview.data.length);
+        
+        // Map headers by exact column names (case-insensitive)
         const headers = preview.headers.map((h: string) => h.toLowerCase());
-        const nameIdx = headers.findIndex((h: string) => h.includes('name') || h.includes('last') || h.includes('first'));
-        const discIdx = headers.findIndex((h: string) => h.includes('discipline') || h.includes('instrument'));
-        const degreeIdx = headers.findIndex((h: string) => h.includes('degree'));
-        const reasonIdx = headers.findIndex((h: string) => h.includes('reason') || h.includes('code'));
-        const detailsIdx = headers.findIndex((h: string) => h.includes('detail') || h.includes('note'));
+        const idIdx = headers.indexOf('applicantid');
+        const discIdx = headers.indexOf('discipline');
+        const degreeIdx = headers.indexOf('degree');
+        const reasonIdx = headers.indexOf('reasoncode');
+        const detailsIdx = headers.indexOf('details');
         
         const mappedConflicts: Conflict[] = preview.data.map((row: string[]) => ({
-          name: nameIdx >= 0 ? row[nameIdx] : row[0] || 'Unknown',
-          discipline: discIdx >= 0 ? row[discIdx] : row[1] || '-',
-          degree: degreeIdx >= 0 ? row[degreeIdx] : '-',
-          reason: reasonIdx >= 0 ? row[reasonIdx] : '-',
-          details: detailsIdx >= 0 ? row[detailsIdx] : '-',
+          applicantId: idIdx >= 0 ? row[idIdx] : row[0] || '-',
+          discipline: discIdx >= 0 ? row[discIdx] : row[2] || '-',
+          degree: degreeIdx >= 0 ? row[degreeIdx] : row[1] || '-',
+          reasonCode: reasonIdx >= 0 ? row[reasonIdx] : row[3] || '-',
+          details: detailsIdx >= 0 ? row[detailsIdx] : row[4] || '-',
         }));
         
         setConflicts(mappedConflicts);
@@ -123,7 +127,7 @@ export default function ResultsDisplay() {
 
   const allMetrics = parseMetrics(results.metrics);
   const summaryMetrics = allMetrics.slice(0, 4);
-  const hasMoreConflicts = conflicts.length > 10;
+  const hasMoreConflicts = totalConflicts > 10;
   const displayedConflicts = conflicts.slice(0, 10);
 
   return (
@@ -191,9 +195,9 @@ export default function ResultsDisplay() {
                 Conflicts
               </CardTitle>
               <CardDescription>
-                {conflicts.length === 0 
+                {totalConflicts === 0 
                   ? 'No conflicts found - all applicants were scheduled!'
-                  : `${conflicts.length} applicant${conflicts.length === 1 ? '' : 's'} could not be scheduled`
+                  : `${totalConflicts} applicant${totalConflicts === 1 ? '' : 's'} could not be scheduled`
                 }
               </CardDescription>
             </div>
@@ -216,7 +220,7 @@ export default function ResultsDisplay() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Applicant ID</th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">Discipline</th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">Degree</th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">Reason</th>
@@ -226,12 +230,12 @@ export default function ResultsDisplay() {
                   <tbody>
                     {displayedConflicts.map((conflict, i) => (
                       <tr key={i} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 font-medium">{conflict.name}</td>
+                        <td className="px-4 py-3 font-medium">{conflict.applicantId}</td>
                         <td className="px-4 py-3 text-muted-foreground">{conflict.discipline}</td>
                         <td className="px-4 py-3 text-muted-foreground">{conflict.degree}</td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                            {conflict.reason}
+                            {conflict.reasonCode}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground max-w-xs truncate" title={conflict.details}>
@@ -251,14 +255,14 @@ export default function ResultsDisplay() {
                   onClick={() => handleDownload(results.outputFiles.conflicts)}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  View all {conflicts.length} conflicts
+                  View all {totalConflicts} conflicts
                   <ExternalLink className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             )}
           </CardContent>
         )}
-        {conflicts.length === 0 && !loadingConflicts && (
+        {totalConflicts === 0 && !loadingConflicts && (
           <CardContent className="pt-0">
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <CheckCircle className="mr-2 h-5 w-5 text-green-500" />
