@@ -41,24 +41,18 @@ export default function ResultsDisplay() {
     setLoadingConflicts(true);
     try {
       const preview = await window.electronAPI.readExcelPreview(results.outputFiles.conflicts, 15);
-      if (preview.success && preview.data && preview.headers) {
+      if (preview.success && preview.data) {
         // Store actual total count
         setTotalConflicts(preview.total_rows || preview.data.length);
         
-        // Map headers by exact column names (case-insensitive)
-        const headers = preview.headers.map((h: string) => h.toLowerCase());
-        const idIdx = headers.indexOf('applicantid');
-        const discIdx = headers.indexOf('discipline');
-        const degreeIdx = headers.indexOf('degree');
-        const reasonIdx = headers.indexOf('reasoncode');
-        const detailsIdx = headers.indexOf('details');
-        
-        const mappedConflicts: Conflict[] = preview.data.map((row: string[]) => ({
-          applicantId: idIdx >= 0 ? row[idIdx] : row[0] || '-',
-          discipline: discIdx >= 0 ? row[discIdx] : row[2] || '-',
-          degree: degreeIdx >= 0 ? row[degreeIdx] : row[1] || '-',
-          reasonCode: reasonIdx >= 0 ? row[reasonIdx] : row[3] || '-',
-          details: detailsIdx >= 0 ? row[detailsIdx] : row[4] || '-',
+        // Data is an array of objects with column names as keys
+        // e.g., { ApplicantID: "...", Discipline: "...", Degree: "...", ReasonCode: "...", Details: "..." }
+        const mappedConflicts: Conflict[] = preview.data.map((row: Record<string, any>) => ({
+          applicantId: row['ApplicantID'] || row['applicantid'] || '-',
+          discipline: row['Discipline'] || row['discipline'] || '-',
+          degree: row['Degree'] || row['degree'] || '-',
+          reasonCode: row['ReasonCode'] || row['reasoncode'] || '-',
+          details: row['Details'] || row['details'] || '-',
         }));
         
         setConflicts(mappedConflicts);

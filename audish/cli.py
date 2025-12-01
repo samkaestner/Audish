@@ -381,9 +381,10 @@ def excel_preview(file_path, max_rows):
         
         rows = list(sheet.iter_rows(values_only=True))
         if not rows:
-            result = {"success": True, "headers": [], "data": []}
+            result = {"success": True, "headers": [], "data": [], "total_rows": 0}
         else:
             headers = [str(h) if h is not None else "" for h in rows[0]]
+            total_rows = len(rows) - 1  # Exclude header row
             data = []
             for row in rows[1:max_rows + 1]:
                 row_data = {}
@@ -397,7 +398,7 @@ def excel_preview(file_path, max_rows):
                             value = ""
                         row_data[headers[i]] = value
                 data.append(row_data)
-            result = {"success": True, "headers": headers, "data": data}
+            result = {"success": True, "headers": headers, "data": data, "total_rows": total_rows}
         
         wb.close()
         print(json.dumps(result))
