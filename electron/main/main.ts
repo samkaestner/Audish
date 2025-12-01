@@ -187,7 +187,6 @@ ipcMain.handle('run-scheduler', async (_, config: {
       const args = [
         ...audish.args,
         'schedule',
-        '--progress', // Enable machine-readable progress output
         '--app', config.applicantFile,
         '--fac', config.facultyFile,
         '--map', config.mappingFile,
