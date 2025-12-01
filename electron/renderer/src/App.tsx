@@ -74,15 +74,9 @@ function App() {
           </p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_350px]">
-          <div className="space-y-8">
-            <FileUpload />
-            <CalendarConfig />
-          </div>
-          
-          <div className="space-y-6">
-            {/* Sidebar content could go here if needed, or we can keep it full width */}
-          </div>
+        <div className="space-y-8">
+          <FileUpload />
+          <CalendarConfig />
         </div>
         
         {isRunning && (
@@ -103,12 +97,14 @@ function App() {
         )}
 
         {error && (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive dark:border-destructive">
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-bold">Error</span>
-              <p className="text-sm font-medium">{error}</p>
-            </div>
-          </div>
+          <Card className="border-destructive/50 bg-destructive/10">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3 text-destructive">
+                <span className="text-lg font-bold">Error</span>
+                <p className="text-sm font-medium">{error}</p>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {results && (
