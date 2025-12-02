@@ -62,15 +62,17 @@ Click **"Validate Configuration"** to check your files before running:
 
 ### 7. View Results
 
-- **Metrics**: Summary statistics at the top
-- **Schedule tab**: View scheduled applicants
-- **Conflicts tab**: View applicants that couldn't be scheduled
-- **Metrics tab**: Full metrics report
+- **Success message**: Confirms schedule was generated with "Open in Excel" and "Download" buttons
+- **Metrics summary**: Key statistics displayed in cards at the top
+- **Conflicts table**: Preview of applicants that couldn't be scheduled (first 10 shown)
+- **Detailed metrics**: Click to expand for full statistics breakdown
 
-### 8. Download Results
+### 8. Access Output Files
 
-- Click "Download Excel" buttons to save output files
-- Files will be saved to your chosen location
+- Click **"Open in Excel"** to open the schedule directly in Excel
+- Click **"Download"** to save a copy to your chosen location
+- Click **"Download All"** on the conflicts section to get the full conflicts file
+- All files can also be found in the application's output directory
 
 ## Output Files
 

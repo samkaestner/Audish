@@ -21,8 +21,8 @@ The application restricts file access to:
 - Bundled application resources
 
 **Implementation:**
-- `electron/main/security.js` - Security validation module
-- `electron/main/main.js` - IPC handlers with path validation
+- `electron/main/security.ts` - Security validation module
+- `electron/main/main.ts` - IPC handlers with path validation
 
 ### Path Traversal Prevention
 
