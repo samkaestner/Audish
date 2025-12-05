@@ -151,14 +151,31 @@ class Scheduler:
                     break
             
             if not assigned:
-                # Check if registration date is missing - only flag if registration date field is configured
+                # Check registration date issues - only if registration date field is configured
                 if self.registration_date_field:
                     registration_date_str = self._parse_registration_date(applicant)
+                    
+                    # Check if registration date is missing
                     if registration_date_str is None:
                         self._add_conflict(
                             applicant,
                             reason_codes.REGISTRATION_DATE_MISSING,
                             "Registration date is missing from applicant data - cannot schedule"
+                        )
+                        continue
+                    
+                    # Check if registration date is not in the calendar
+                    calendar_dates = set()
+                    for day in self.rules.get_calendar_days():
+                        day_date = day['date'] if isinstance(day['date'], str) else day['date'].strftime('%Y-%m-%d')
+                        calendar_dates.add(day_date)
+                    
+                    if registration_date_str not in calendar_dates:
+                        self._add_conflict(
+                            applicant,
+                            reason_codes.REGISTRATION_DATE_NOT_IN_CALENDAR,
+                            f"Registration date {registration_date_str} is not an audition day. "
+                            f"Calendar days: {', '.join(sorted(calendar_dates))}"
                         )
                         continue
                 
@@ -615,12 +632,23 @@ class Scheduler:
                 if not date_value:
                     continue
                 
-                # Try common date formats
+                # Try common date and datetime formats
+                # Include formats with time since "Event – Most Recent Registration Event Date/Time"
+                # may contain values like "3/7/2025 10:30:00 AM"
                 formats = [
-                    '%Y-%m-%d',      # 2025-02-28
-                    '%m/%d/%Y',      # 2/28/2025
-                    '%m-%d-%Y',      # 2-28-2025
-                    '%Y/%m/%d',      # 2025/02/28
+                    # Date only formats
+                    '%Y-%m-%d',           # 2025-02-28
+                    '%m/%d/%Y',           # 2/28/2025 or 02/28/2025
+                    '%m-%d-%Y',           # 2-28-2025
+                    '%Y/%m/%d',           # 2025/02/28
+                    # Datetime formats (time will be ignored, only date extracted)
+                    '%m/%d/%Y %I:%M:%S %p',  # 3/7/2025 10:30:00 AM
+                    '%m/%d/%Y %I:%M %p',     # 3/7/2025 10:30 AM
+                    '%m/%d/%Y %H:%M:%S',     # 3/7/2025 14:30:00
+                    '%m/%d/%Y %H:%M',        # 3/7/2025 14:30
+                    '%Y-%m-%d %H:%M:%S',     # 2025-03-07 14:30:00
+                    '%Y-%m-%d %H:%M',        # 2025-03-07 14:30
+                    '%Y-%m-%dT%H:%M:%S',     # 2025-03-07T14:30:00 (ISO format)
                 ]
                 
                 for fmt in formats:
