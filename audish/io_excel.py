@@ -20,13 +20,27 @@ def read_excel_sheet(filepath: str, sheet_name: Optional[str] = None) -> tuple[L
         
     Returns:
         Tuple of (column_names, rows) where rows is list of dicts
+        
+    Note:
+        If the specified sheet name isn't found but the workbook only has one sheet,
+        that sheet is used automatically. This handles the common case where users
+        copy/paste data into a new workbook (which defaults to "Sheet1").
     """
     wb = openpyxl.load_workbook(filepath, data_only=True)
     
     if sheet_name:
         if sheet_name not in wb.sheetnames:
-            raise ValueError(f"Sheet '{sheet_name}' not found in {filepath}. Available: {wb.sheetnames}")
-        ws = wb[sheet_name]
+            # If there's only one sheet, use it regardless of name
+            # This handles copy/paste into new workbook scenarios
+            if len(wb.sheetnames) == 1:
+                ws = wb.active
+            else:
+                raise ValueError(
+                    f"Sheet '{sheet_name}' not found in {filepath}. "
+                    f"Available sheets: {wb.sheetnames}"
+                )
+        else:
+            ws = wb[sheet_name]
     else:
         ws = wb.active
     
@@ -101,31 +115,64 @@ def write_schedule_excel(
 def write_conflicts_excel(
     filepath: str,
     conflicts: List[Dict[str, Any]],
+    original_columns: Optional[List[str]] = None,
     sheet_name: str = "Conflicts"
 ) -> None:
     """
     Write conflicts report to Excel.
     
+    Preserves all original identifying fields from the input data, making it
+    easier to understand why each applicant was excluded.
+    
     Args:
         filepath: Output Excel file path
-        conflicts: List of conflict dicts with keys: ApplicantID, Degree, Discipline, ReasonCode, Details
+        conflicts: List of conflict dicts containing original applicant data plus conflict fields
+        original_columns: Original column names from input (preserves order). If None, auto-detects.
         sheet_name: Name of output sheet
     """
     wb = Workbook()
     ws = wb.active
     ws.title = sheet_name
     
-    # Define columns
-    columns = ["ApplicantID", "Degree", "Discipline", "ReasonCode", "Details"]
+    if not conflicts:
+        # Write empty file with just conflict headers
+        columns = ["ReasonCode", "ConflictDetails"]
+        for col_idx, col_name in enumerate(columns, start=1):
+            ws.cell(row=1, column=col_idx, value=col_name)
+        Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        wb.save(filepath)
+        wb.close()
+        return
+    
+    # Build column list: original columns first, then conflict-specific fields at the end
+    # Conflict-specific fields are prefixed with _ to distinguish them
+    conflict_fields = ['_ReasonCode', '_ConflictDetails', '_Discipline']
+    
+    if original_columns:
+        # Use the original column order, filtering out conflict-specific fields
+        columns = [col for col in original_columns if not col.startswith('_')]
+    else:
+        # Auto-detect columns from first conflict record (excluding internal fields)
+        columns = [k for k in conflicts[0].keys() if not k.startswith('_')]
+    
+    # Add conflict-specific fields at the end with friendly names
+    output_columns = columns + ['Reason Code', 'Conflict Details', 'Discipline']
+    
+    # Map from output column name to source key
+    column_source_map = {col: col for col in columns}
+    column_source_map['Reason Code'] = '_ReasonCode'
+    column_source_map['Conflict Details'] = '_ConflictDetails'
+    column_source_map['Discipline'] = '_Discipline'
     
     # Write header
-    for col_idx, col_name in enumerate(columns, start=1):
+    for col_idx, col_name in enumerate(output_columns, start=1):
         ws.cell(row=1, column=col_idx, value=col_name)
     
     # Write conflicts
     for row_idx, conflict in enumerate(conflicts, start=2):
-        for col_idx, col_name in enumerate(columns, start=1):
-            value = conflict.get(col_name, "")
+        for col_idx, col_name in enumerate(output_columns, start=1):
+            source_key = column_source_map.get(col_name, col_name)
+            value = conflict.get(source_key, "")
             ws.cell(row=row_idx, column=col_idx, value=value)
     
     # Create parent directory if needed
@@ -145,6 +192,10 @@ def get_date_columns(filepath: str, sheet_name: Optional[str] = None) -> List[An
         
     Returns:
         List of column headers that appear to be dates (preserves original type)
+        
+    Note:
+        If the specified sheet name isn't found but the workbook only has one sheet,
+        that sheet is used automatically.
     """
     import re
     from datetime import datetime
@@ -152,7 +203,13 @@ def get_date_columns(filepath: str, sheet_name: Optional[str] = None) -> List[An
     wb = openpyxl.load_workbook(filepath, data_only=True)
     
     if sheet_name:
-        ws = wb[sheet_name]
+        if sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        elif len(wb.sheetnames) == 1:
+            # Use the only available sheet
+            ws = wb.active
+        else:
+            ws = wb[sheet_name]  # This will raise KeyError with available sheets
     else:
         ws = wb.active
     

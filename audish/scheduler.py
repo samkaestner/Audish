@@ -491,23 +491,56 @@ class Scheduler:
         """
         Add an applicant to the conflicts list.
         
+        Preserves all identifying fields from the original input to make it
+        easier to understand why someone was excluded.
+        
         Args:
             applicant: Applicant dict
             reason_code: Reason code constant
             details: Human-readable details
         """
-        self.conflicts.append({
-            'ApplicantID': applicant.get('id', ''),
-            'Degree': applicant.get('degree', ''),
-            'Discipline': applicant.get('major') or applicant.get('department', ''),
-            'ReasonCode': reason_code,
-            'Details': details
-        })
+        # Start with all original data from the input file
+        conflict_record = {}
+        if '_original' in applicant:
+            conflict_record = dict(applicant['_original'])
+        
+        # Add/override with conflict-specific fields at the end
+        # These will appear as additional columns in the output
+        conflict_record['_ReasonCode'] = reason_code
+        conflict_record['_ConflictDetails'] = details
+        
+        # Also store the discipline for grouping purposes
+        conflict_record['_Discipline'] = applicant.get('major') or applicant.get('department', '')
+        
+        self.conflicts.append(conflict_record)
     
     def _number_auditions(self) -> None:
         """
         Assign sequential Music Audition Order per discipline across all days.
         """
+        from .faculty import parse_time
+        
+        def get_sort_key(record: Dict[str, Any]) -> Tuple[str, datetime]:
+            """Create a sort key that properly handles 12-hour time format."""
+            date_str = record.get('Music Audition Date', '')
+            time_str = record.get('Music Audition Time', '')
+            
+            # Parse the time to get proper chronological ordering
+            time_obj = parse_time(time_str) if time_str else None
+            
+            if date_str and time_obj:
+                # Create a full datetime for proper sorting
+                try:
+                    dt = datetime.strptime(date_str, '%Y-%m-%d').replace(
+                        hour=time_obj.hour, minute=time_obj.minute
+                    )
+                    return (date_str, dt)
+                except ValueError:
+                    pass
+            
+            # Fallback: use a very late datetime to push invalid entries to the end
+            return (date_str, datetime.max)
+        
         # Group by discipline
         by_discipline = defaultdict(list)
         for scheduled in self.scheduled:
@@ -517,11 +550,8 @@ class Scheduler:
         
         # Number each discipline
         for discipline, records in by_discipline.items():
-            # Sort by date, then time
-            records.sort(key=lambda x: (
-                x.get('Music Audition Date', ''),
-                x.get('Music Audition Time', '')
-            ))
+            # Sort by date, then time (using proper datetime parsing)
+            records.sort(key=get_sort_key)
             
             # Assign sequential numbers
             for order, record in enumerate(records, start=1):

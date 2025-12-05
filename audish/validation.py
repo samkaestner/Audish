@@ -285,26 +285,37 @@ def _validate_excel_file(
         available_sheets = wb.sheetnames
         
         # Check sheet exists
+        # If there's only one sheet, use it regardless of name (handles copy/paste scenarios)
         if expected_sheet not in available_sheets:
-            suggestions = get_close_matches(expected_sheet, available_sheets, n=1, cutoff=0.5)
-            
-            suggestion_text = ""
-            if suggestions:
-                suggestion_text = f"\n\nDid you mean '{suggestions[0]}'?"
-            
-            result.add_error(
-                f"❌ Sheet Not Found: '{expected_sheet}'\n\n"
-                f"File: {Path(excel_path).name}\n"
-                f"Available sheets: {', '.join(available_sheets)}{suggestion_text}\n\n"
-                f"Fix: Update {Path(mapping_path).name}:\n\n"
-                f"{section}:\n"
-                f"  sheet: \"{available_sheets[0]}\"  # Use exact sheet name"
-            )
-            wb.close()
-            return None
-        
-        # Get headers from sheet
-        sheet = wb[expected_sheet]
+            if len(available_sheets) == 1:
+                # Single sheet in workbook - use it automatically
+                # This handles the common case where users copy/paste data into a new workbook
+                sheet = wb[available_sheets[0]]
+                result.add_warning(
+                    f"Sheet '{expected_sheet}' not found in {Path(excel_path).name}, "
+                    f"using '{available_sheets[0]}' (only sheet in workbook)."
+                )
+            else:
+                # Multiple sheets but expected one not found - this is an error
+                suggestions = get_close_matches(expected_sheet, available_sheets, n=1, cutoff=0.5)
+                
+                suggestion_text = ""
+                if suggestions:
+                    suggestion_text = f"\n\nDid you mean '{suggestions[0]}'?"
+                
+                result.add_error(
+                    f"❌ Sheet Not Found: '{expected_sheet}'\n\n"
+                    f"File: {Path(excel_path).name}\n"
+                    f"Available sheets: {', '.join(available_sheets)}{suggestion_text}\n\n"
+                    f"Fix: Update {Path(mapping_path).name}:\n\n"
+                    f"{section}:\n"
+                    f"  sheet: \"{available_sheets[0]}\"  # Use exact sheet name"
+                )
+                wb.close()
+                return None
+        else:
+            # Get headers from the expected sheet
+            sheet = wb[expected_sheet]
         first_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
         wb.close()
         
@@ -490,7 +501,15 @@ def _validate_rules_coverage(
     
     try:
         wb = load_workbook(applicant_path, read_only=True, data_only=True)
-        sheet = wb[sheet_name]
+        
+        # Handle sheet name - use first sheet if only one available
+        if sheet_name in wb.sheetnames:
+            sheet = wb[sheet_name]
+        elif len(wb.sheetnames) == 1:
+            sheet = wb.active
+        else:
+            wb.close()
+            return  # Sheet validation would have caught this already
         
         # Get header row to find column indices
         headers = [str(h) if h else "" for h in next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))]
