@@ -23,9 +23,6 @@ extraResources:
       - "**/*.yaml"
       - "**/*.yml"
 
-# Post-pack hook to set executable permissions
-afterPack: "./scripts/after-pack.js"
-
 extraMetadata:
   main: main/main.js
 

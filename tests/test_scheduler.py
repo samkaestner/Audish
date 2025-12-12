@@ -127,6 +127,95 @@ class TestDegreeOrdering:
         
         # BM should have earlier date/time
         assert scheduled_times[bm_idx] < scheduled_times[mm_idx]
+    
+    def test_per_day_degree_ordering(self, sample_config_files):
+        """Test that degree ordering is applied within each day."""
+        mapping_path, rules_path = sample_config_files
+        
+        mapper = ColumnMapper(mapping_path)
+        rules = RulesEngine(rules_path)
+        
+        # Create multiple applicants of different degrees
+        # If degree ordering is per-day, BMs should be scheduled early on each day,
+        # MMs should follow
+        applicants = [
+            # Day 1 applicants (assuming teacher is only available day 1)
+            {
+                'id': 'BM1', 'degree': 'BM', 'major': 'Violin',
+                'teacher1': 'Prof. Smith', 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {}
+            },
+            {
+                'id': 'MM1', 'degree': 'MM', 'major': 'Violin',
+                'teacher1': 'Prof. Smith', 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {}
+            },
+            {
+                'id': 'BM2', 'degree': 'BM', 'major': 'Violin',
+                'teacher1': 'Prof. Smith', 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {}
+            },
+            {
+                'id': 'MM2', 'degree': 'MM', 'major': 'Violin',
+                'teacher1': 'Prof. Smith', 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {}
+            },
+        ]
+        
+        # Prof. Smith available both days
+        faculty_availability = {
+            'Prof. Smith': {
+                '2025-03-01': [(time(9, 0), time(12, 0))],
+                '2025-03-02': [(time(9, 0), time(12, 0))]
+            }
+        }
+        
+        # Build faculty name map
+        from audish.faculty_names import build_faculty_name_map
+        faculty_names = set(faculty_availability.keys())
+        faculty_name_map = build_faculty_name_map(faculty_names)
+        
+        scheduler = Scheduler(rules, faculty_availability, applicants, mapper, faculty_name_map)
+        scheduled, conflicts = scheduler.schedule()
+        
+        # All should be scheduled
+        assert len(scheduled) == 4
+        assert len(conflicts) == 0
+        
+        # Group by day and check ordering within each day
+        from audish.faculty import parse_time
+        
+        by_day = {}
+        for s in scheduled:
+            date_str = s['Music Audition Date']
+            time_str = s['Music Audition Time']
+            time_obj = parse_time(time_str)
+            if date_str not in by_day:
+                by_day[date_str] = []
+            by_day[date_str].append({
+                'id': s['id'],
+                'degree': s['degree'],
+                'time': time_obj
+            })
+        
+        # Within each day, BMs should come before MMs
+        for date_str, day_applicants in by_day.items():
+            day_applicants.sort(key=lambda x: (x['time'].hour, x['time'].minute))
+            
+            # Find the last BM time and first MM time
+            bm_times = [a['time'] for a in day_applicants if a['degree'] == 'BM']
+            mm_times = [a['time'] for a in day_applicants if a['degree'] == 'MM']
+            
+            if bm_times and mm_times:
+                last_bm = max(bm_times, key=lambda t: (t.hour, t.minute))
+                first_mm = min(mm_times, key=lambda t: (t.hour, t.minute))
+                # Last BM should be before or equal to first MM
+                assert (last_bm.hour, last_bm.minute) <= (first_mm.hour, first_mm.minute), \
+                    f"On {date_str}, BMs should be scheduled before MMs"
 
 
 class TestTeacherPresence:
@@ -241,6 +330,117 @@ class TestNumbering:
         # Check numbering is sequential 1, 2, 3
         orders = sorted([s['Music Audition Order'] for s in scheduled])
         assert orders == [1, 2, 3]
+
+
+class TestMissingDataConflicts:
+    """Test that missing registration dates and faculty availability result in conflicts."""
+    
+    def test_missing_registration_date_creates_conflict(self, sample_config_files):
+        """Test that applicants with missing registration dates are marked as conflicts."""
+        mapping_path, rules_path = sample_config_files
+        
+        # Update mapping to include registration_date field
+        import tempfile
+        import os
+        
+        mapping_content = """
+applicants:
+  sheet: "Export"
+  columns:
+    id: "ApplicantID"
+    degree: "Degree"
+    major: "Major"
+    teacher1: "Teacher1"
+    teacher2: "Teacher2"
+    teacher3: "Teacher3"
+    school_org: "School"
+    juilliard_status: "Status"
+    registration_date: "EventDate"
+
+faculty:
+  sheet: "Sheet1"
+  columns:
+    faculty_name: "Name"
+    notes: "Notes"
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(mapping_content)
+            mapping_path_with_reg = f.name
+        
+        try:
+            mapper = ColumnMapper(mapping_path_with_reg)
+            rules = RulesEngine(rules_path)
+            
+            # Applicant WITHOUT registration date
+            applicants = [
+                {
+                    'id': 'A001', 'degree': 'BM', 'major': 'Violin',
+                    'teacher1': 'Prof. Smith', 'teacher2': None, 'teacher3': None,
+                    'school_org': None, 'juilliard_status': None,
+                    'registration_date': None,  # Missing!
+                    '_original': {'ApplicantID': 'A001'}
+                }
+            ]
+            
+            faculty_availability = {
+                'Prof. Smith': {
+                    '2025-03-01': [(time(9, 0), time(12, 0))],
+                    '2025-03-02': [(time(9, 0), time(12, 0))]
+                }
+            }
+            
+            from audish.faculty_names import build_faculty_name_map
+            faculty_names = set(faculty_availability.keys())
+            faculty_name_map = build_faculty_name_map(faculty_names)
+            
+            scheduler = Scheduler(rules, faculty_availability, applicants, mapper, faculty_name_map)
+            scheduled, conflicts = scheduler.schedule()
+            
+            # Should NOT be scheduled, should be in conflicts
+            assert len(scheduled) == 0
+            assert len(conflicts) == 1
+            assert conflicts[0]['_ReasonCode'] == 'REGISTRATION_DATE_MISSING'
+        
+        finally:
+            os.unlink(mapping_path_with_reg)
+    
+    def test_missing_faculty_availability_creates_conflict(self, sample_config_files):
+        """Test that applicants whose teachers have no availability data are marked as conflicts."""
+        mapping_path, rules_path = sample_config_files
+        
+        mapper = ColumnMapper(mapping_path)
+        rules = RulesEngine(rules_path)
+        
+        # Applicant wants Prof. Jones who has NO availability data
+        applicants = [
+            {
+                'id': 'A001', 'degree': 'BM', 'major': 'Violin',
+                'teacher1': 'Prof. Jones', 'teacher2': None, 'teacher3': None,
+                'school_org': None, 'juilliard_status': None,
+                '_original': {'ApplicantID': 'A001'}
+            }
+        ]
+        
+        # Faculty availability exists for Prof. Smith, but NOT for Prof. Jones
+        faculty_availability = {
+            'Prof. Smith': {
+                '2025-03-01': [(time(9, 0), time(12, 0))],
+                '2025-03-02': [(time(9, 0), time(12, 0))]
+            }
+        }
+        
+        from audish.faculty_names import build_faculty_name_map
+        faculty_names = set(faculty_availability.keys())
+        faculty_name_map = build_faculty_name_map(faculty_names)
+        
+        scheduler = Scheduler(rules, faculty_availability, applicants, mapper, faculty_name_map)
+        scheduled, conflicts = scheduler.schedule()
+        
+        # Should NOT be scheduled, should be in conflicts
+        assert len(scheduled) == 0
+        assert len(conflicts) == 1
+        assert conflicts[0]['_ReasonCode'] == 'TEACHER_UNAVAILABLE'
+        assert 'Prof. Jones' in conflicts[0]['_ConflictDetails']
 
 
 class TestSameSchoolSpacing:

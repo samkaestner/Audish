@@ -80,6 +80,9 @@ class Scheduler:
         """
         Schedule all applicants for a single discipline.
         
+        Implements per-day degree ordering preference: within each audition day,
+        BMs are scheduled early, MM/GDs in the middle, AD/DMAs at the end.
+        
         Args:
             discipline: Discipline/instrument name
             applicants: List of applicants in this discipline
@@ -110,76 +113,106 @@ class Scheduler:
             x['applicant'].get('id', '')
         ))
         
-        # State for strict degree ordering
-        current_degree_rank = -1
-        strict_ordering_cutoff: Optional[datetime] = None
-        discipline_max_end_time: Optional[datetime] = None
+        # Track per-day slot usage by degree to enforce within-day ordering
+        # Key: (date_str, degree_rank) -> latest end time for that degree on that day
+        per_day_degree_end_times: Dict[Tuple[str, int], datetime] = {}
         
-        # Greedy assignment
+        # Greedy assignment with per-day degree ordering preference
         for item in applicant_slots:
             applicant = item['applicant']
             valid_slots = item['valid_slots']
-            
-            # Check for degree rank change
             degree_rank = self.rules.get_degree_rank(applicant.get('degree', ''))
-            if degree_rank > current_degree_rank:
-                if current_degree_rank != -1:
-                    # Update cutoff for lower priority degrees
-                    # Strict ordering: subsequent degrees must start after all previous degree slots end
-                    strict_ordering_cutoff = discipline_max_end_time
-                current_degree_rank = degree_rank
             
-            # Filter valid slots if strict ordering is in effect
-            if strict_ordering_cutoff:
-                # Only consider slots that start at or after the cutoff time
-                # (i.e. after the latest slot used by higher priority degrees)
-                valid_slots = [
-                    s for s in valid_slots 
-                    if s['start'] >= strict_ordering_cutoff
-                ]
+            # Early conflict detection: check for missing required data before attempting to schedule
+            # This prevents defaulting to the first calendar day when data is incomplete
+            
+            # Check for missing registration date
+            if self.registration_date_field:
+                registration_date_str = self._parse_registration_date(applicant)
+                if registration_date_str is None:
+                    self._add_conflict(
+                        applicant,
+                        reason_codes.REGISTRATION_DATE_MISSING,
+                        "Registration date is missing from applicant data - cannot schedule"
+                    )
+                    continue
+                
+                # Check if registration date is in the calendar
+                calendar_dates = set()
+                for day in self.rules.get_calendar_days():
+                    day_date = day['date'] if isinstance(day['date'], str) else day['date'].strftime('%Y-%m-%d')
+                    calendar_dates.add(day_date)
+                
+                if registration_date_str not in calendar_dates:
+                    self._add_conflict(
+                        applicant,
+                        reason_codes.REGISTRATION_DATE_NOT_IN_CALENDAR,
+                        f"Registration date {registration_date_str} is not an audition day. "
+                        f"Calendar days: {', '.join(sorted(calendar_dates))}"
+                    )
+                    continue
+            
+            # Check for missing faculty availability for teachers with preferences
+            teacher1 = applicant.get('teacher1')
+            teacher2 = applicant.get('teacher2')
+            teacher3 = applicant.get('teacher3')
+            has_teacher_preferences = bool(teacher1 or teacher2 or teacher3)
+            
+            if has_teacher_preferences:
+                # Check if any preferred teacher has availability data
+                has_faculty_data = False
+                teacher_list = []
+                for teacher_name in [teacher1, teacher2, teacher3]:
+                    if teacher_name:
+                        teacher_list.append(teacher_name)
+                        from .faculty_names import match_teacher_name
+                        faculty_name = match_teacher_name(teacher_name, self.faculty_name_map)
+                        if faculty_name and faculty_name in self.faculty_availability:
+                            # Check if this faculty has any availability on any day
+                            for date_avail in self.faculty_availability[faculty_name].values():
+                                if date_avail:
+                                    has_faculty_data = True
+                                    break
+                        if has_faculty_data:
+                            break
+                
+                if not has_faculty_data:
+                    self._add_conflict(
+                        applicant,
+                        reason_codes.TEACHER_UNAVAILABLE,
+                        f"None of the preferred teachers ({', '.join(teacher_list)}) have availability data"
+                    )
+                    continue
+            
+            # Apply per-day degree ordering: filter slots to respect within-day ordering
+            # For each day, prefer slots that don't conflict with the ordering preference
+            filtered_slots = self._apply_per_day_degree_filter(
+                valid_slots, degree_rank, per_day_degree_end_times
+            )
+            
+            # If filtering removed all slots, fall back to original valid_slots
+            # (degree ordering is a preference, not a hard constraint)
+            if not filtered_slots and valid_slots:
+                filtered_slots = valid_slots
             
             assigned = False
-            for slot_info in valid_slots:
+            for slot_info in filtered_slots:
                 if self._try_assign_slot(applicant, discipline, slot_info):
                     assigned = True
                     
-                    # Update max end time for this discipline
+                    # Update per-day degree end time tracking
+                    date_str = slot_info['date']
                     slot_end = slot_info['end']
-                    if discipline_max_end_time is None or slot_end > discipline_max_end_time:
-                        discipline_max_end_time = slot_end
+                    key = (date_str, degree_rank)
+                    if key not in per_day_degree_end_times or slot_end > per_day_degree_end_times[key]:
+                        per_day_degree_end_times[key] = slot_end
                         
                     break
             
             if not assigned:
-                # Check registration date issues - only if registration date field is configured
-                if self.registration_date_field:
-                    registration_date_str = self._parse_registration_date(applicant)
-                    
-                    # Check if registration date is missing
-                    if registration_date_str is None:
-                        self._add_conflict(
-                            applicant,
-                            reason_codes.REGISTRATION_DATE_MISSING,
-                            "Registration date is missing from applicant data - cannot schedule"
-                        )
-                        continue
-                    
-                    # Check if registration date is not in the calendar
-                    calendar_dates = set()
-                    for day in self.rules.get_calendar_days():
-                        day_date = day['date'] if isinstance(day['date'], str) else day['date'].strftime('%Y-%m-%d')
-                        calendar_dates.add(day_date)
-                    
-                    if registration_date_str not in calendar_dates:
-                        self._add_conflict(
-                            applicant,
-                            reason_codes.REGISTRATION_DATE_NOT_IN_CALENDAR,
-                            f"Registration date {registration_date_str} is not an audition day. "
-                            f"Calendar days: {', '.join(sorted(calendar_dates))}"
-                        )
-                        continue
-                
                 # Determine conflict reason
+                # Note: Missing registration date and faculty availability are caught earlier,
+                # so this section handles other conflict types (capacity, scheduling conflicts, etc.)
                 teacher1 = applicant.get('teacher1')
                 teacher2 = applicant.get('teacher2')
                 teacher3 = applicant.get('teacher3')
@@ -220,6 +253,51 @@ class Scheduler:
                 
                 self._add_conflict(applicant, reason, details)
     
+    def _apply_per_day_degree_filter(
+        self,
+        valid_slots: List[Dict[str, Any]],
+        degree_rank: int,
+        per_day_degree_end_times: Dict[Tuple[str, int], datetime]
+    ) -> List[Dict[str, Any]]:
+        """
+        Filter and re-order slots to enforce per-day degree ordering preference.
+        
+        Within each day, applicants should be scheduled in degree order:
+        BMs first (morning), MM/GDs middle, AD/DMAs at end.
+        
+        Args:
+            valid_slots: List of valid slot info dicts
+            degree_rank: Rank of the applicant's degree (0=BM, higher=lower priority)
+            per_day_degree_end_times: Tracking dict of (date, degree_rank) -> latest end time
+            
+        Returns:
+            Filtered list of slots respecting per-day degree ordering
+        """
+        if not valid_slots:
+            return valid_slots
+        
+        filtered = []
+        for slot in valid_slots:
+            date_str = slot['date']
+            slot_start = slot['start']
+            
+            # Check if any higher-priority degree has been scheduled on this day
+            # If so, this slot should start after their latest slot ends
+            should_include = True
+            for prev_rank in range(degree_rank):
+                key = (date_str, prev_rank)
+                if key in per_day_degree_end_times:
+                    # Higher priority degree was scheduled on this day
+                    # Prefer slots that start at or after their end time
+                    if slot_start < per_day_degree_end_times[key]:
+                        should_include = False
+                        break
+            
+            if should_include:
+                filtered.append(slot)
+        
+        return filtered
+    
     def _compute_valid_slots(
         self,
         applicant: Dict[str, Any],
@@ -250,6 +328,32 @@ class Scheduler:
         registration_date_str = None
         if self.registration_date_field:
             registration_date_str = self._parse_registration_date(applicant)
+            # If registration date field is configured but missing for this applicant,
+            # return empty slots list to force a conflict instead of defaulting to first day
+            if registration_date_str is None:
+                return []
+        
+        # If applicant has teacher preferences, check if any of those teachers exist in faculty availability
+        if has_teacher_preferences:
+            has_any_faculty_data = False
+            for teacher_name in [teacher1, teacher2, teacher3]:
+                if teacher_name:
+                    # Match teacher name to faculty name
+                    from .faculty_names import match_teacher_name
+                    faculty_name = match_teacher_name(teacher_name, self.faculty_name_map)
+                    if faculty_name and faculty_name in self.faculty_availability:
+                        # Check if this faculty member has any availability on any day
+                        for date_avail in self.faculty_availability[faculty_name].values():
+                            if date_avail:  # Non-empty list of time ranges
+                                has_any_faculty_data = True
+                                break
+                    if has_any_faculty_data:
+                        break
+            
+            # If applicant has teacher preferences but none of those teachers have any availability data,
+            # return empty slots to force a conflict
+            if not has_any_faculty_data:
+                return []
         
         valid_slots = []
         
@@ -293,6 +397,7 @@ class Scheduler:
                 })
         
         # Sort by: teacher rank (desc) → earliest time
+        # The per-day degree filter handles ordering BM → MM/GD → AD/DMA within each day
         valid_slots.sort(key=lambda x: (-x['teacher_rank'], x['start']))
         
         return valid_slots

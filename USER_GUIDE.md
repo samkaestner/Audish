@@ -17,26 +17,7 @@ Audish is an automated scheduling tool that assigns audition times to applicants
 
 ---
 
-## Desktop Application (Recommended)
-
-The easiest way to use Audish is through the desktop application:
-
-1. **Install the application** (download the installer for your platform)
-2. **Upload your Excel files** (drag & drop or click to browse)
-3. **Click "Validate Configuration"** to check your files
-4. **Configure audition calendar** (add/edit days)
-5. **Click "Run Scheduler"**
-6. **Download results**
-
-The desktop app is pre-configured for your school - no manual configuration needed!
-
-See `electron/TESTER_INSTRUCTIONS.md` for detailed desktop app instructions.
-
----
-
-## Command Line Quick Start (TL;DR)
-
-For advanced users or automation:
+## Quick Start (TL;DR)
 
 1. **Install Python 3.8+** (if not already installed)
 2. **Navigate to the Audish folder** in Terminal/Command Prompt
@@ -44,9 +25,8 @@ For advanced users or automation:
    - Windows: `python -m venv .venv` then `.venv\Scripts\activate` then `pip install -e .`
    - Mac/Linux: `make install` (or manual: `python3 -m venv .venv` then `source .venv/bin/activate` then `pip install -e .`)
 4. **Activate virtual environment** (always do this before running)
-5. **Validate:** `audish validate --app "YourApplicants.xlsx" --fac "YourFaculty.xlsx" --map schools/juilliard/mapping.yaml --rules schools/juilliard/rules.yaml`
-6. **Run:** `audish schedule --app "YourApplicants.xlsx" --fac "YourFaculty.xlsx" --map schools/juilliard/mapping.yaml --rules schools/juilliard/rules.yaml --out-schedule output/FinalSchedule.xlsx --out-conflicts output/Conflicts.xlsx --out-metrics output/Metrics.txt`
-7. **Check results** in the `output/` folder
+5. **Run:** `audish schedule --app "YourApplicants.xlsx" --fac "YourFaculty.xlsx" --map schools/juilliard/mapping.yaml --rules schools/juilliard/rules.yaml --out-schedule output/FinalSchedule.xlsx --out-conflicts output/Conflicts.xlsx --out-metrics output/Metrics.txt`
+6. **Check results** in the `output/` folder
 
 ---
 
@@ -174,36 +154,7 @@ source .venv/bin/activate
 
 You should see `(.venv)` appear at the start of your command prompt.
 
-### Step 3: Validate Configuration (Recommended)
-
-Before running the scheduler, validate your configuration to catch errors early:
-
-**On Windows:**
-```cmd
-audish validate --app "YOUR_APPLICANT_FILE.xlsx" --fac "YOUR_FACULTY_FILE.xlsx" --map schools/juilliard/mapping.yaml --rules schools/juilliard/rules.yaml
-```
-
-**On Mac/Linux:**
-```bash
-audish validate \
-  --app "YOUR_APPLICANT_FILE.xlsx" \
-  --fac "YOUR_FACULTY_FILE.xlsx" \
-  --map schools/juilliard/mapping.yaml \
-  --rules schools/juilliard/rules.yaml
-```
-
-**What validation checks:**
-- ✅ YAML configuration files are properly formatted
-- ✅ Excel column names match the mapping configuration
-- ✅ All applicant disciplines have scheduling rules defined
-- ✅ Calendar days are properly configured
-
-**If validation fails:**
-- Read the error messages - they explain exactly what's wrong
-- Fix the issue in the relevant file (mapping.yaml, rules.yaml, or your Excel files)
-- Run validation again until it passes
-
-### Step 4: Run the Scheduler
+### Step 3: Run the Scheduler
 
 **Option A: Using Make (Mac/Linux only, or Windows with WSL/Git Bash)**
 
@@ -236,7 +187,7 @@ audish schedule \
 - Windows: `--app "C:\Users\YourName\Documents\Applicants.xlsx"`
 - Mac/Linux: `--app "/Users/YourName/Documents/Applicants.xlsx"`
 
-### Step 5: Review Output
+### Step 4: Review Output
 
 The scheduler creates an `output/` folder with three files:
 
@@ -244,7 +195,7 @@ The scheduler creates an `output/` folder with three files:
    - Contains all original applicant columns
    - Plus three new columns:
      - `Music Audition Date` (YYYY-MM-DD)
-     - `Music Audition Time` (12-hour format with AM/PM, e.g., "9:00 AM", "2:30 PM")
+     - `Music Audition Time` (HH:MM in 24-hour format)
      - `Music Audition Order` (sequential number per instrument)
 
 2. **Conflicts.xlsx** - Any applicants that couldn't be scheduled
@@ -269,16 +220,13 @@ While running, you'll see progress messages:
 Audish - Audition Scheduler
 ============================================================
 
-[0/8] Validating configuration...
-  ✓ Configuration validated
-
-[1/8] Loading configuration...
+[1/7] Loading configuration...
   ✓ Loaded mapping: schools/juilliard/mapping.yaml
   ✓ Loaded rules: schools/juilliard/rules.yaml
   ✓ Teacher presence policy: prefer
   ✓ Degree precedence: BM → MM → GD → AD → DMA
 
-[2/8] Loading applicants...
+[2/7] Loading applicants...
   ✓ Loaded 1132 applicants from 'Export'
   ✓ Disciplines: 41 unique
     • Piano: 161
@@ -321,11 +269,9 @@ Configuration files are in YAML format (text files). You can edit them with any 
 
 **⚠️ Important:** Be careful with spacing and indentation in YAML files - they are sensitive to formatting!
 
-### Calendar Dates and Times
+### Calendar Dates
 
-Edit `schools/juilliard/rules.yaml` to update audition dates and times. Find the `calendar` section:
-
-#### Basic Calendar Setup
+Edit `schools/juilliard/rules.yaml` to update audition dates. Find the `calendar` section and modify the dates:
 
 ```yaml
 calendar:
@@ -339,73 +285,6 @@ calendar:
 - Dates must be in `YYYY-MM-DD` format
 - Times are in 24-hour format (`09:00` = 9:00 AM, `17:00` = 5:00 PM)
 - Make sure these dates match the date columns in your faculty availability file
-
-#### Global Time Defaults (All Days, All Disciplines)
-
-If most auditions start at the same time (e.g., 10:00 AM) and end at the same time (e.g., 6:00 PM), you can set global defaults:
-
-```yaml
-calendar:
-  # Set global defaults for all days and all disciplines
-  default_start_time: "10:00"  # All auditions start at 10:00 AM
-  default_end_time: "18:00"    # All auditions end at 6:00 PM
-  
-  days:
-    - { date: 2025-02-28 }     # Uses global defaults (10:00-18:00)
-    - { date: 2025-03-01 }     # Uses global defaults (10:00-18:00)
-    - { date: 2025-03-02, start: "09:00", end: "17:00" }  # Overrides global defaults
-```
-
-**Benefits:**
-- Set times once for all days and disciplines
-- Individual days can still override if needed
-- Saves time when most days have the same schedule
-
-#### Per-Discipline Time Overrides
-
-If specific instruments/disciplines need different start or end times, you can override them:
-
-**Example 1: Override for entire discipline (all degrees)**
-```yaml
-rules:
-  Violin:
-    start_time: "10:00"  # Violin auditions start at 10:00 AM
-    end_time: "18:00"    # Violin auditions end at 6:00 PM
-    ALL: { cadence: { type: fixed_interval, minutes: 15 } }
-```
-
-**Example 2: Override for specific degree only**
-```yaml
-rules:
-  Piano:
-    BM: 
-      start_time: "10:00"  # Piano BM starts at 10:00 AM
-      end_time: "16:00"    # Piano BM ends at 4:00 PM
-      cadence: { type: fixed_interval, minutes: 20 }
-    MM: 
-      # Piano MM uses calendar defaults (no override)
-      cadence: { type: fixed_interval, minutes: 20 }
-```
-
-**Example 3: Partial override (only start or only end)**
-```yaml
-rules:
-  Cello:
-    start_time: "10:00"  # Only override start time, uses calendar end_time
-    ALL: { cadence: { type: fixed_interval, minutes: 15 } }
-```
-
-**Priority Order:**
-1. Degree-specific `start_time`/`end_time` (highest priority)
-2. Discipline ALL `start_time`/`end_time`
-3. Discipline-level `start_time`/`end_time`
-4. Day-specific `start`/`end` (from calendar days)
-5. Global calendar defaults `default_start_time`/`default_end_time` (lowest priority)
-
-**When to use:**
-- Most areas start at 10:00 AM or later → Use global calendar defaults
-- Specific instruments need different times → Use per-discipline overrides
-- Only certain degrees need different times → Use per-degree overrides
 
 ### Instrument Rules
 
@@ -502,10 +381,7 @@ applicants:
 
 **Fix:**
 - Add more audition days in `rules.yaml`
-- Extend daily hours (start earlier/end later) using:
-  - Global calendar defaults (`default_start_time`/`default_end_time`)
-  - Per-discipline time overrides (`start_time`/`end_time`)
-  - Day-specific times in the calendar days list
+- Extend daily hours (start earlier/end later)
 - Switch from "require" to "prefer" teacher presence policy in `rules.yaml`
 - Verify calendar dates in `rules.yaml` match the date columns in your faculty file
 
@@ -547,10 +423,9 @@ Once the small test works, run with your complete dataset:
 Check that:
 - ✅ No time overlaps for the same instrument
 - ✅ Sequential numbering per instrument (1, 2, 3, etc.)
-- ✅ Degree precedence respected (BM applicants scheduled first, then MM/GD, then AD, then DMA)
-- ✅ Times fall within the calendar hours specified in rules.yaml (or discipline-specific overrides)
+- ✅ Degree precedence respected (BM applicants scheduled first)
+- ✅ Times fall within the calendar hours specified in rules.yaml
 - ✅ Teacher preferences are honored when possible
-- ✅ Times respect global calendar defaults or discipline-specific overrides (if configured)
 
 ---
 
@@ -564,14 +439,10 @@ Before running the scheduler with your actual data:
 - [ ] Faculty availability Excel file is ready with YYYY-MM-DD date columns
 - [ ] `mapping.yaml` column names match your Excel file columns
 - [ ] `rules.yaml` has the correct audition dates for your schedule
-- [ ] Time overrides are configured correctly (if using global defaults or per-discipline overrides)
-- [ ] **Run `audish validate` to check configuration** (catches errors before scheduling)
 - [ ] You've tested with a small sample file first (recommended)
 - [ ] You know where your output files will be saved (`output/` folder)
 
-**Recommended:** 
-1. Always run `audish validate` first to catch configuration errors
-2. Test with a small subset (10-20 applicants) before running the full dataset
+**Recommended:** Always test with a small subset (10-20 applicants) before running the full dataset!
 
 ---
 

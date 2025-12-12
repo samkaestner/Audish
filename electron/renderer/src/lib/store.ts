@@ -7,6 +7,8 @@ interface SchedulerState {
   rulesFile: string;
   calendarDays: Array<{ date: string; start: string; end: string }>;
   isRunning: boolean;
+  isValidating: boolean;
+  validationResult: { valid: boolean; message?: string } | null;
   results: {
     scheduled: any[];
     conflicts: any[];
@@ -24,6 +26,9 @@ interface SchedulerState {
   setRulesFile: (file: string) => void;
   setCalendarDays: (days: Array<{ date: string; start: string; end: string }>) => void;
   setIsRunning: (running: boolean) => void;
+  setIsValidating: (validating: boolean) => void;
+  setValidationResult: (result: { valid: boolean; message?: string } | null) => void;
+  clearValidation: () => void;
   setResults: (results: any) => void;
   setError: (error: string | null) => void;
 }
@@ -35,6 +40,8 @@ export const useSchedulerStore = create<SchedulerState>((set) => ({
   rulesFile: 'schools/juilliard/rules.yaml',
   calendarDays: [],
   isRunning: false,
+  isValidating: false,
+  validationResult: null,
   results: null,
   error: null,
   setApplicantFile: (file) => set({ applicantFile: file }),
@@ -43,6 +50,9 @@ export const useSchedulerStore = create<SchedulerState>((set) => ({
   setRulesFile: (file) => set({ rulesFile: file }),
   setCalendarDays: (days) => set({ calendarDays: days }),
   setIsRunning: (running) => set({ isRunning: running }),
+  setIsValidating: (validating) => set({ isValidating: validating }),
+  setValidationResult: (result) => set({ validationResult: result }),
+  clearValidation: () => set({ validationResult: null }),
   setResults: (results) => set({ results, error: null }),
   setError: (error) => set({ error, results: null }),
 }));
