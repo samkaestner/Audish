@@ -1,7 +1,6 @@
 export interface ElectronAPI {
   selectFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
   selectFolder: () => Promise<string | null>;
-  registerDroppedFile: (filePath: string) => Promise<boolean>;
   runScheduler: (options: {
     applicantFile: string;
     facultyFile: string;
@@ -44,10 +43,7 @@ export interface ElectronAPI {
   writeFile: (filePath: string, content: string) => Promise<{ success: boolean; error?: string }>;
   getProjectRoot: () => Promise<string>;
   getSchoolsDir: () => Promise<string>;
-  getUserDataDir: () => Promise<string>;
-  downloadFile: (filePath: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
-  onSchedulerProgress: (callback: (progress: any) => void) => () => void;
+  downloadFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {
@@ -55,3 +51,4 @@ declare global {
     electronAPI: ElectronAPI;
   }
 }
+

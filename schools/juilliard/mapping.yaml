@@ -17,7 +17,7 @@ applicants:
     bm_bcj_flag: "BM and BCJ Applicant"
     modality_accommodation: "Audition Modality Accommodation Approved"
     # Registration date - applicants will only be scheduled on this date
-    registration_date: "Event – Most Recent Registration Event Date/Time"
+    registration_date: "Event - Most Recent Registration Event Date/Time"
 
 faculty:
   sheet: "Sheet1"

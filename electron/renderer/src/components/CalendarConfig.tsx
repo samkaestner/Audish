@@ -7,6 +7,17 @@ import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter } from '
 import { Plus, Trash2, Play, Calendar as CalendarIcon, Clock, CheckCircle2, AlertTriangle, Shield } from 'lucide-react';
 import * as yaml from 'js-yaml';
 
+function resolveConfigPath(file: string, projectRoot: string, schoolsDir?: string): string {
+  // If absolute path (mac/linux) or windows drive path, use as-is
+  if (file.startsWith('/') || file.match(/^[A-Z]:/)) return file;
+  // If this is one of the bundled school config paths, resolve against bundled schools directory
+  if (schoolsDir && (file === 'schools' || file.startsWith('schools/'))) {
+    const relativeToSchools = file.replace(/^schools\/?/, '');
+    return `${schoolsDir}/${relativeToSchools}`;
+  }
+  return `${projectRoot}/${file}`;
+}
+
 export default function CalendarConfig() {
   const {
     calendarDays,
@@ -37,15 +48,42 @@ export default function CalendarConfig() {
     if (!window.electronAPI) return;
     
     try {
-      // Use getSchoolsDir for bundled config files (works in both dev and packaged mode)
-      const schoolsDir = await window.electronAPI.getSchoolsDir();
-      // rulesFile is relative like 'schools/juilliard/rules.yaml', extract the part after 'schools/'
-      const rulesRelativePath = rulesFile.replace(/^schools\//, '');
-      const rulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/) 
-        ? rulesFile 
-        : `${schoolsDir}/${rulesRelativePath}`;
+      const projectRoot = await window.electronAPI.getProjectRoot();
+      const schoolsDir = await window.electronAPI.getSchoolsDir?.();
+      const rulesPath = resolveConfigPath(rulesFile, projectRoot, schoolsDir);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/cb5411a4-8082-4f74-9a01-c0dea3aab458', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'A',
+          location: 'electron/renderer/src/components/CalendarConfig.tsx:loadCalendarFromRules',
+          message: 'Resolving rules path for calendar load',
+          data: { projectRoot, schoolsDir, rulesFile, rulesPath },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       
       const fileResult = await window.electronAPI.readFile(rulesPath);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/cb5411a4-8082-4f74-9a01-c0dea3aab458', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'A',
+          location: 'electron/renderer/src/components/CalendarConfig.tsx:loadCalendarFromRules',
+          message: 'Read rules file result',
+          data: { rulesPath, success: fileResult?.success, error: fileResult?.error, contentLength: fileResult?.content?.length },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (fileResult.success && fileResult.content) {
         // Use custom schema to prevent automatic date parsing
         const schema = yaml.DEFAULT_SCHEMA.extend([]);
@@ -125,19 +163,27 @@ export default function CalendarConfig() {
     clearValidation();
 
     try {
-      const schoolsDir = await window.electronAPI.getSchoolsDir();
+      const projectRoot = await window.electronAPI.getProjectRoot();
+      const schoolsDir = await window.electronAPI.getSchoolsDir?.();
       
-      // Build paths using schoolsDir for bundled config files
-      const mappingRelPath = mappingFile.replace(/^schools\//, '');
-      const rulesRelPath = rulesFile.replace(/^schools\//, '');
+      const mappingPath = resolveConfigPath(mappingFile, projectRoot, schoolsDir);
+      const rulesPath = resolveConfigPath(rulesFile, projectRoot, schoolsDir);
       
-      const mappingPath = mappingFile.startsWith('/') || mappingFile.match(/^[A-Z]:/)
-        ? mappingFile
-        : `${schoolsDir}/${mappingRelPath}`;
-      
-      const rulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/)
-        ? rulesFile
-        : `${schoolsDir}/${rulesRelPath}`;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/cb5411a4-8082-4f74-9a01-c0dea3aab458', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'A',
+          location: 'electron/renderer/src/components/CalendarConfig.tsx:validateConfig',
+          message: 'Resolved mapping/rules paths for validate',
+          data: { projectRoot, schoolsDir, mappingFile, rulesFile, mappingPath, rulesPath },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
 
       const result = await window.electronAPI.validateConfig({
         applicantFile,
@@ -178,19 +224,36 @@ export default function CalendarConfig() {
 
     try {
       // Create temporary rules file with updated calendar
-      const schoolsDir = await window.electronAPI.getSchoolsDir();
-      const userDataDir = await window.electronAPI.getUserDataDir();
+      const projectRoot = await window.electronAPI.getProjectRoot();
+      const schoolsDir = await window.electronAPI.getSchoolsDir?.();
+      const originalRulesPath = resolveConfigPath(rulesFile, projectRoot, schoolsDir);
       
-      // Build path for reading bundled rules
-      const rulesRelPath = rulesFile.replace(/^schools\//, '');
-      const originalRulesPath = rulesFile.startsWith('/') || rulesFile.match(/^[A-Z]:/)
-        ? rulesFile
-        : `${schoolsDir}/${rulesRelPath}`;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/cb5411a4-8082-4f74-9a01-c0dea3aab458', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix',
+          hypothesisId: 'B',
+          location: 'electron/renderer/src/components/CalendarConfig.tsx:runScheduler',
+          message: 'Resolved paths for scheduler run (incl temp rules/output)',
+          data: {
+            projectRoot,
+            schoolsDir,
+            originalRulesPath,
+            tempRulesPath: `${projectRoot}/temp_rules.yaml`,
+            outputDir: `${projectRoot}/output`,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       
       const fileResult = await window.electronAPI.readFile(originalRulesPath);
       
       if (!fileResult.success) {
-        throw new Error(`Failed to read rules file: ${fileResult.error || 'Unknown error'}`);
+        throw new Error('Failed to read rules file');
       }
 
       // Use custom schema to prevent automatic date parsing
@@ -198,21 +261,34 @@ export default function CalendarConfig() {
       const rules = yaml.load(fileResult.content || '', { schema }) as any;
       rules.calendar = { days: calendarDays };
       
-      // Write temporary rules file to user data directory (writable in both dev and packaged mode)
-      const tempRulesPath = `${userDataDir}/temp_rules.yaml`;
+      // Write temporary rules file
+      const tempRulesPath = `${projectRoot}/temp_rules.yaml`;
       const writeResult = await window.electronAPI.writeFile(tempRulesPath, yaml.dump(rules));
       if (!writeResult.success) {
-        throw new Error(`Failed to write temporary rules file: ${writeResult.error || 'Unknown error'}`);
+        throw new Error('Failed to write temporary rules file');
       }
 
-      // Get output directory (use user data dir which is writable)
-      const outputDir = `${userDataDir}/output`;
+      // Get output directory (use user's home dir for packaged app, can't write inside .app bundle)
+      const outputDir = `${projectRoot}/output`;
       
-      // Build mapping path using schoolsDir for bundled config
-      const mappingRelPath = mappingFile.replace(/^schools\//, '');
-      const mappingPath = mappingFile.startsWith('/') || mappingFile.match(/^[A-Z]:/)
-        ? mappingFile
-        : `${schoolsDir}/${mappingRelPath}`;
+      // Use resolveConfigPath for mapping file (schoolsDir-aware)
+      const mappingPath = resolveConfigPath(mappingFile, projectRoot, schoolsDir);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/cb5411a4-8082-4f74-9a01-c0dea3aab458', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'post-fix',
+          hypothesisId: 'C',
+          location: 'electron/renderer/src/components/CalendarConfig.tsx:runScheduler',
+          message: 'Final resolved paths sent to scheduler',
+          data: { mappingPath, tempRulesPath, outputDir },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       
       const result = await window.electronAPI.runScheduler({
         applicantFile,
