@@ -117,14 +117,6 @@ export default function ResultsDisplay() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleDownload(results.outputFiles.schedule)}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Schedule
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
             onClick={() => handleDownload(results.outputFiles.conflicts)}
           >
             <Download className="mr-2 h-4 w-4" />
@@ -209,14 +201,6 @@ export default function ResultsDisplay() {
                       Download the Excel file to view scheduled applicants
                     </CardDescription>
                   </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleDownload(results.outputFiles.schedule)}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Excel
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="py-6">
@@ -345,10 +329,34 @@ export default function ResultsDisplay() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="bg-muted/30 p-6 overflow-x-auto">
-                  <pre className="font-mono text-sm whitespace-pre-wrap text-foreground/80">
-                    {results.metrics}
-                  </pre>
+                <div className="bg-muted/30 p-6 space-y-3">
+                  {results.metrics.split('\n').map((line, index) => {
+                    const trimmed = line.trim();
+
+                    if (!trimmed) {
+                      return <div key={index} className="h-2" />;
+                    }
+
+                    const isSectionHeader = !line.startsWith('  ');
+
+                    if (isSectionHeader) {
+                      return (
+                        <div key={index} className="text-sm font-semibold text-foreground">
+                          {trimmed}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={index}
+                        className="pl-4 text-sm text-muted-foreground flex gap-2"
+                      >
+                        <span className="text-muted-foreground/70">•</span>
+                        <span>{trimmed}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
