@@ -74,15 +74,9 @@ function App() {
           </p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_350px]">
-          <div className="space-y-8">
-            <FileUpload />
-            <CalendarConfig />
-          </div>
-          
-          <div className="space-y-6">
-            {/* Sidebar content could go here if needed, or we can keep it full width */}
-          </div>
+        <div className="space-y-8">
+          <FileUpload />
+          <CalendarConfig />
         </div>
         
         {isRunning && (

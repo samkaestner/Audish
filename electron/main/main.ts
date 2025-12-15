@@ -296,27 +296,16 @@ ipcMain.handle('file-exists', async (_, filePath: string) => {
 
 ipcMain.handle('read-excel-preview', async (_, filePath: string, maxRows: number = 100) => {
   return new Promise((resolve) => {
-    const audish = getAudishExecutable();
     const projectRoot = getProjectRoot();
+
+    // For Excel preview we call the lightweight helper module directly:
+    //   python -m audish.excel_reader <filePath> <maxRows>
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const args = ['-m', 'audish.excel_reader', filePath, maxRows.toString()];
+
+    console.log(`[excel-preview] Command: ${pythonCmd} ${args.join(' ')}`);
     
-    let command: string;
-    let args: string[];
-    
-    if (audish.useBundled) {
-      // Use bundled executable with excel-preview subcommand
-      command = audish.command;
-      args = ['excel-preview', filePath, '--max-rows', maxRows.toString()];
-      console.log('[excel-preview] Using bundled CLI');
-    } else {
-      // Use system Python with the CLI module
-      command = audish.command;
-      args = [...audish.args, 'excel-preview', filePath, '--max-rows', maxRows.toString()];
-      console.log('[excel-preview] Using system Python');
-    }
-    
-    console.log(`[excel-preview] Command: ${command} ${args.join(' ')}`);
-    
-    const excelProcess = spawn(command, args, {
+    const excelProcess = spawn(pythonCmd, args, {
       cwd: projectRoot,
     });
     

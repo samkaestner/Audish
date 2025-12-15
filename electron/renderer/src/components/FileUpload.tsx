@@ -25,31 +25,40 @@ export default function FileUpload() {
   }, [setApplicantFile, setFacultyFile]);
 
   const handleDrop = useCallback(
-    async (e: React.DragEvent, type: 'applicant' | 'faculty') => {
+    (e: React.DragEvent, type: 'applicant' | 'faculty') => {
       e.preventDefault();
+      e.stopPropagation();
       setDragging(null);
 
       const files = Array.from(e.dataTransfer.files);
       const excelFile = files.find(
-        (f) => f.name.endsWith('.xlsx') || f.name.endsWith('.xls')
+        (f) => f.name.toLowerCase().endsWith('.xlsx') || f.name.toLowerCase().endsWith('.xls')
       );
 
-      if (excelFile) {
-        // In Electron, we need to use the file path
-        // We rely on the fact that the Electron drag event might provide path
-        // But for now we trigger the dialog if drag/drop path access is restricted in renderer
-        // Or assume the store handles the path if we could get it. 
-        // Since we can't easily get full path from drop in renderer without some config,
-        // we will just open the dialog as a fallback or if possible use the mock.
-        // Re-triggering selection for safety in this demo context:
-        handleFileSelect(type);
+      if (!excelFile) {
+        return;
+      }
+
+      // In Electron, dropped files include a non-standard `path` property
+      const fileWithPath = excelFile as File & { path?: string };
+      const filePath = fileWithPath.path || fileWithPath.name;
+
+      if (!filePath) {
+        return;
+      }
+
+      if (type === 'applicant') {
+        setApplicantFile(filePath);
+      } else {
+        setFacultyFile(filePath);
       }
     },
-    [handleFileSelect]
+    [setApplicantFile, setFacultyFile]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
   }, []);
 
   return (
