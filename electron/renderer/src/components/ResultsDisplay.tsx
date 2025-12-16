@@ -247,13 +247,41 @@ export default function ResultsDisplay() {
 
                 {!loadingConflicts && !conflictsError && conflictPreview && (
                   <div className="space-y-4">
-                    <div className="rounded-md border bg-background">
+                    <div className="rounded-md border bg-background overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            {conflictPreview.headers.map((header) => (
-                              <TableHead key={header}>{header}</TableHead>
-                            ))}
+                            {conflictPreview.headers.map((header, colIndex) => {
+                              // Prioritize important columns - make them wider
+                              const isImportantColumn =
+                                header === '_ReasonCode' ||
+                                header.toLowerCase().includes('reason') ||
+                                header.toLowerCase().includes('conflict') ||
+                                header.toLowerCase().includes('school') ||
+                                header.toLowerCase().includes('name') ||
+                                header.toLowerCase().includes('applicant');
+                              
+                              const isLongHeader = header.length > 30;
+                              const shortHeader = isLongHeader
+                                ? header
+                                    .replace(/Event - Most Recent Registration /g, '')
+                                    .replace(/Event Date\/Time/g, 'Date/Time')
+                                    .replace(/Audition Modality Accommodation Approved/g, 'Modality')
+                                    .replace(/BM and BCJ Applicant/g, 'BM/BCJ')
+                                : header;
+
+                              return (
+                                <TableHead
+                                  key={header}
+                                  className={isImportantColumn ? 'min-w-[150px]' : 'min-w-[100px] max-w-[200px]'}
+                                  title={isLongHeader ? header : undefined}
+                                >
+                                  <div className="truncate" title={header}>
+                                    {shortHeader}
+                                  </div>
+                                </TableHead>
+                              );
+                            })}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -267,10 +295,26 @@ export default function ResultsDisplay() {
 
                                 const isReasonCodeColumn =
                                   header === '_ReasonCode' || header.toLowerCase().includes('reason');
+                                
+                                const isConflictDetailsColumn =
+                                  header.toLowerCase().includes('conflict') && header.toLowerCase().includes('detail');
+                                
+                                const isImportantColumn =
+                                  isReasonCodeColumn ||
+                                  isConflictDetailsColumn ||
+                                  header.toLowerCase().includes('school') ||
+                                  header.toLowerCase().includes('name');
+
+                                // Truncate long text (except for reason codes)
+                                const maxLength = isImportantColumn ? 80 : 40;
+                                const shouldTruncate = rawValue.length > maxLength;
+                                const displayValue = shouldTruncate
+                                  ? rawValue.substring(0, maxLength) + '...'
+                                  : rawValue;
 
                                 if (isReasonCodeColumn && rawValue) {
                                   return (
-                                    <TableCell key={`${header}-${colIndex}`}>
+                                    <TableCell key={`${header}-${colIndex}`} className="whitespace-nowrap">
                                       <span
                                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${getReasonCodeStyle(
                                           rawValue
@@ -283,8 +327,14 @@ export default function ResultsDisplay() {
                                 }
 
                                 return (
-                                  <TableCell key={`${header}-${colIndex}`}>
-                                    {rawValue}
+                                  <TableCell
+                                    key={`${header}-${colIndex}`}
+                                    className={isImportantColumn ? 'min-w-[150px]' : 'min-w-[100px] max-w-[200px]'}
+                                    title={shouldTruncate ? rawValue : undefined}
+                                  >
+                                    <div className="truncate" title={rawValue}>
+                                      {displayValue}
+                                    </div>
                                   </TableCell>
                                 );
                               })}
