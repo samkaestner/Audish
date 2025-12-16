@@ -3,7 +3,7 @@ import { useSchedulerStore } from '../lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
-import { Download, CheckCircle, AlertCircle, BarChart3, FileSpreadsheet } from 'lucide-react';
+import { Download, CheckCircle, AlertCircle, BarChart3 } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from './ui/table';
 
 export default function ResultsDisplay() {
@@ -299,9 +299,9 @@ export default function ResultsDisplay() {
                         and detailed reason codes.
                       </span>
                       <Button
-                        variant="link"
+                        variant="ghost"
                         size="sm"
-                        className="px-0"
+                        className="px-0 h-auto text-primary underline hover:no-underline"
                         onClick={() => handleDownload(results.outputFiles.conflicts)}
                       >
                         See all &amp; download Excel
