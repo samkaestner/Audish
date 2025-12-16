@@ -251,7 +251,7 @@ export default function ResultsDisplay() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            {conflictPreview.headers.map((header, colIndex) => {
+                            {conflictPreview.headers.map((header) => {
                               // Prioritize important columns - make them wider
                               const isImportantColumn =
                                 header === '_ReasonCode' ||
