@@ -69,7 +69,7 @@ pip install pyinstaller
 pip install -e .
 
 # Verify audish is installed
-if ! python -c "import audish" 2>/dev/null; then
+if ! python3 -c "import audish" 2>/dev/null; then
     echo -e "${RED}Error: audish package not properly installed${NC}"
     exit 1
 fi

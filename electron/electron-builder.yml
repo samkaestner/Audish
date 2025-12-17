@@ -36,6 +36,17 @@ mac:
   gatekeeperAssess: false
   entitlements: null
   entitlementsInherit: null
+  # Code signing configuration
+  # To enable code signing, set these environment variables:
+  #   export CSC_NAME="Developer ID Application: Your Name (TEAM_ID)"
+  #   export APPLE_ID="your@email.com"
+  #   export APPLE_APP_SPECIFIC_PASSWORD="app-specific-password"
+  #   export APPLE_TEAM_ID="TEAM_ID"
+  # 
+  # For unsigned builds, users can bypass Gatekeeper by:
+  #   1. Right-click the .dmg and select "Open" (instead of double-clicking)
+  #   2. Or run: xattr -cr /path/to/Audition\ Scheduler.dmg
+  identity: null  # Set to null for unsigned builds, or use CSC_NAME env var
   # Include the bundled Python executable for macOS
   extraResources:
     - from: resources/audish-cli
