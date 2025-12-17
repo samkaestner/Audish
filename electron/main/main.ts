@@ -374,6 +374,17 @@ ipcMain.handle('download-file', async (_, filePath: string) => {
       });
       
       if (!result.canceled && result.filePath) {
+        // If destination file exists, delete it first to ensure clean overwrite
+        // This handles cases where the file might be locked or have permission issues
+        if (existsSync(result.filePath)) {
+          try {
+            await fs.unlink(result.filePath);
+          } catch (unlinkError: any) {
+            // If we can't delete it, try to overwrite anyway
+            console.warn(`[download-file] Could not delete existing file: ${unlinkError.message}`);
+          }
+        }
+        
         // Copy file to destination
         await fs.copyFile(filePath, result.filePath);
         return { success: true, path: result.filePath };

@@ -47,6 +47,7 @@ class Scheduler:
         # Scheduling state
         self.scheduled: List[Dict[str, Any]] = []
         self.conflicts: List[Dict[str, Any]] = []
+        self.breaks: List[Dict[str, Any]] = []  # Break information for output
         self.slot_assignments: Dict[Tuple[str, str, datetime], str] = {}  # (discipline, date, time) -> applicant_id
         self.applicant_slots: Dict[str, List[Tuple[datetime, datetime]]] = {}  # applicant_id -> [(start, end), ...]
     
@@ -162,6 +163,8 @@ class Scheduler:
                 # Check if any preferred teacher has availability data
                 has_faculty_data = False
                 teacher_list = []
+                teacher_availability_info = []
+                
                 for teacher_name in [teacher1, teacher2, teacher3]:
                     if teacher_name:
                         teacher_list.append(teacher_name)
@@ -169,18 +172,31 @@ class Scheduler:
                         faculty_name = match_teacher_name(teacher_name, self.faculty_name_map)
                         if faculty_name and faculty_name in self.faculty_availability:
                             # Check if this faculty has any availability on any day
-                            for date_avail in self.faculty_availability[faculty_name].values():
-                                if date_avail:
+                            available_days = []
+                            for date_str, date_avail in self.faculty_availability[faculty_name].items():
+                                if date_avail:  # Non-empty list of time ranges
                                     has_faculty_data = True
-                                    break
+                                    available_days.append(date_str)
+                            
+                            if available_days:
+                                teacher_availability_info.append(f"{teacher_name} available on: {', '.join(sorted(available_days))}")
                         if has_faculty_data:
                             break
                 
                 if not has_faculty_data:
+                    # Get registration date for better diagnostics
+                    registration_date_str = None
+                    if self.registration_date_field:
+                        registration_date_str = self._parse_registration_date(applicant)
+                    
+                    details = f"None of the preferred teachers ({', '.join(teacher_list)}) have availability data in the faculty availability file"
+                    if registration_date_str:
+                        details += f". Applicant registration date: {registration_date_str}"
+                    
                     self._add_conflict(
                         applicant,
                         reason_codes.TEACHER_UNAVAILABLE,
-                        f"None of the preferred teachers ({', '.join(teacher_list)}) have availability data"
+                        details
                     )
                     continue
             
@@ -223,27 +239,50 @@ class Scheduler:
                     # Check if it's because no teachers are available
                     if has_teacher_preferences:
                         # Check if any day has teacher availability
+                        # Check multiple slots throughout each day (not just first slot)
                         has_any_teacher_availability = False
+                        teacher_available_days = []
+                        
+                        # Get registration date if applicable
+                        registration_date_str = None
+                        if self.registration_date_field:
+                            registration_date_str = self._parse_registration_date(applicant)
+                        
                         for day in self.rules.get_calendar_days():
                             date_str = day['date'] if isinstance(day['date'], str) else day['date'].strftime('%Y-%m-%d')
-                            # Generate a sample slot to check teacher availability
-                            sample_slots = self.rules.generate_slots(discipline, degree, date_str, applicant_count=1)
-                            if sample_slots:
-                                sample_start = sample_slots[0][0]
+                            
+                            # Generate slots to check teacher availability throughout the day
+                            sample_slots, _ = self.rules.generate_slots(discipline, degree, date_str, applicant_count=100)
+                            
+                            # Check multiple slots throughout the day (not just first)
+                            day_has_teacher = False
+                            for slot_start, _ in sample_slots[:10]:  # Check first 10 slots to sample throughout day
                                 teacher_rank = self._check_teacher_presence(
-                                    teacher1, teacher2, teacher3, date_str, sample_start
+                                    teacher1, teacher2, teacher3, date_str, slot_start
                                 )
                                 if teacher_rank > 0:
+                                    day_has_teacher = True
                                     has_any_teacher_availability = True
                                     break
+                            
+                            if day_has_teacher:
+                                teacher_available_days.append(date_str)
                         
                         if not has_any_teacher_availability:
                             reason = reason_codes.TEACHER_UNAVAILABLE
                             teacher_list = [t for t in [teacher1, teacher2, teacher3] if t]
                             details = f"None of the preferred teachers ({', '.join(teacher_list)}) are available on any scheduled day"
                         else:
+                            # Teacher is available on some days, but applicant couldn't be scheduled
                             reason = reason_codes.NO_VALID_SLOTS
-                            details = "No available slots matching all constraints"
+                            teacher_list = [t for t in [teacher1, teacher2, teacher3] if t]
+                            details = f"No available slots matching all constraints. "
+                            details += f"Preferred teachers: {', '.join(teacher_list)}. "
+                            details += f"Teacher available on days: {', '.join(teacher_available_days)}. "
+                            if registration_date_str:
+                                details += f"Applicant registration date: {registration_date_str}. "
+                            if registration_date_str and registration_date_str not in teacher_available_days:
+                                details += "NOTE: Teacher not available on applicant's registration date."
                     else:
                         reason = reason_codes.NO_VALID_SLOTS
                         details = "No available slots matching all constraints"
@@ -336,6 +375,8 @@ class Scheduler:
         # If applicant has teacher preferences, check if any of those teachers exist in faculty availability
         if has_teacher_preferences:
             has_any_faculty_data = False
+            teacher_available_on_registration_date = False
+            
             for teacher_name in [teacher1, teacher2, teacher3]:
                 if teacher_name:
                     # Match teacher name to faculty name
@@ -343,9 +384,12 @@ class Scheduler:
                     faculty_name = match_teacher_name(teacher_name, self.faculty_name_map)
                     if faculty_name and faculty_name in self.faculty_availability:
                         # Check if this faculty member has any availability on any day
-                        for date_avail in self.faculty_availability[faculty_name].values():
+                        for date_str, date_avail in self.faculty_availability[faculty_name].items():
                             if date_avail:  # Non-empty list of time ranges
                                 has_any_faculty_data = True
+                                # Check if teacher available on registration date (if applicable)
+                                if registration_date_str and date_str == registration_date_str:
+                                    teacher_available_on_registration_date = True
                                 break
                     if has_any_faculty_data:
                         break
@@ -354,6 +398,10 @@ class Scheduler:
             # return empty slots to force a conflict
             if not has_any_faculty_data:
                 return []
+            
+            # If registration date is set but no teacher is available on that date,
+            # we'll still generate slots (they'll all be filtered out later with proper reason)
+            # This allows for better error messaging
         
         valid_slots = []
         
@@ -366,7 +414,20 @@ class Scheduler:
                 continue
             
             # Generate slots for this discipline/degree/day
-            slots = self.rules.generate_slots(discipline, degree, date_str, applicant_count=100)
+            slots, breaks_info = self.rules.generate_slots(discipline, degree, date_str, applicant_count=100)
+            
+            # Store break information for this discipline/date (only once per discipline/date)
+            # Check if we've already stored breaks for this discipline/date combo
+            break_key = (discipline, date_str)
+            if not hasattr(self, '_break_keys_stored'):
+                self._break_keys_stored = set()
+            
+            if break_key not in self._break_keys_stored:
+                for break_info in breaks_info:
+                    break_info['discipline'] = discipline
+                    break_info['date'] = date_str
+                    self.breaks.append(break_info)
+                self._break_keys_stored.add(break_key)
             
             for start_time, end_time in slots:
                 # Check teacher presence
@@ -639,11 +700,16 @@ class Scheduler:
     def _number_auditions(self) -> None:
         """
         Assign sequential Music Audition Order per discipline across all days.
+        Orders by degree precedence first (BM → MM/GD → AD → DMA), then chronologically.
         """
         from .faculty import parse_time
         
-        def get_sort_key(record: Dict[str, Any]) -> Tuple[str, datetime]:
-            """Create a sort key that properly handles 12-hour time format."""
+        def get_sort_key(record: Dict[str, Any]) -> Tuple[int, str, datetime]:
+            """Create a sort key that sorts by degree precedence, then date/time."""
+            # Get degree rank (0=BM, 1=MM, etc.)
+            degree = record.get('degree', '')
+            degree_rank = self.rules.get_degree_rank(degree)
+            
             date_str = record.get('Music Audition Date', '')
             time_str = record.get('Music Audition Time', '')
             
@@ -656,12 +722,12 @@ class Scheduler:
                     dt = datetime.strptime(date_str, '%Y-%m-%d').replace(
                         hour=time_obj.hour, minute=time_obj.minute
                     )
-                    return (date_str, dt)
+                    return (degree_rank, date_str, dt)
                 except ValueError:
                     pass
             
             # Fallback: use a very late datetime to push invalid entries to the end
-            return (date_str, datetime.max)
+            return (degree_rank, date_str, datetime.max)
         
         # Group by discipline
         by_discipline = defaultdict(list)
@@ -672,7 +738,7 @@ class Scheduler:
         
         # Number each discipline
         for discipline, records in by_discipline.items():
-            # Sort by date, then time (using proper datetime parsing)
+            # Sort by degree precedence, then date, then time
             records.sort(key=get_sort_key)
             
             # Assign sequential numbers
@@ -853,10 +919,11 @@ def format_scheduled_output(
     original_columns: List[str],
     existing_date_col: Optional[str] = None,
     existing_time_col: Optional[str] = None,
-    existing_order_col: Optional[str] = None
+    existing_order_col: Optional[str] = None,
+    breaks: Optional[List[Dict[str, Any]]] = None
 ) -> List[Dict[str, Any]]:
     """
-    Format scheduled applicants for Excel output.
+    Format scheduled applicants for Excel output, including BREAK rows.
     
     Args:
         scheduled: List of scheduled applicant dicts
@@ -865,9 +932,11 @@ def format_scheduled_output(
         existing_date_col: Name of existing date column in input (if any)
         existing_time_col: Name of existing time column in input (if any)
         existing_order_col: Name of existing order column in input (if any)
+        breaks: List of break info dicts with 'discipline', 'date', 'type', 'start', 'end'
         
     Returns:
         List of dicts ready for Excel output, with columns in original_columns order
+        Includes BREAK rows interspersed with scheduled applicants
     """
     output = []
     
@@ -904,6 +973,158 @@ def format_scheduled_output(
             row[internal_order] = record.get(internal_order, '')
         
         output.append(row)
+    
+    # Create BREAK rows if breaks are provided
+    if breaks:
+        from .faculty import parse_time
+        
+        # Find the major/discipline column name once
+        major_col = None
+        for col in original_columns:
+            col_lower = col.lower()
+            if 'major' in col_lower or ('discipline' in col_lower and 'department' not in col_lower):
+                major_col = col
+                break
+        
+        # If no major column found, check mapper for the normalized field name
+        if not major_col:
+            try:
+                major_field = mapper.get_applicant_column('major')
+                if major_field:
+                    for col in original_columns:
+                        if col == major_field:
+                            major_col = col
+                            break
+            except:
+                pass
+        
+        # Last resort: use first column as fallback
+        if not major_col and original_columns:
+            major_col = original_columns[0]
+        
+        for break_info in breaks:
+            discipline = break_info.get('discipline', '')
+            date_str = break_info.get('date', '')
+            break_type = break_info.get('type', 'break')
+            break_start = break_info.get('start')
+            break_end = break_info.get('end')
+            
+            if not (discipline and date_str and break_start):
+                continue
+            
+            # Find the last scheduled applicant before this break
+            # This determines where the break should appear in the order
+            last_order_before_break = 0
+            if isinstance(break_start, datetime):
+                for row in output:
+                    if row.get('_is_break'):
+                        continue  # Skip other breaks
+                    
+                    # Check if same discipline and date
+                    row_discipline = row.get(major_col, '') if major_col else ''
+                    row_date = row.get(internal_date) or row.get(existing_date_col, '')
+                    
+                    if row_discipline == discipline and row_date == date_str:
+                        # Parse the time for this applicant
+                        time_str = row.get(internal_time) or row.get(existing_time_col, '')
+                        if time_str:
+                            time_obj = parse_time(time_str)
+                            if time_obj:
+                                # Create datetime for comparison
+                                try:
+                                    row_dt = datetime.strptime(date_str, '%Y-%m-%d').replace(
+                                        hour=time_obj.hour, minute=time_obj.minute
+                                    )
+                                    # If this applicant is scheduled before the break, track their order
+                                    if row_dt < break_start:
+                                        order_val = row.get(internal_order) or row.get(existing_order_col)
+                                        if order_val:
+                                            try:
+                                                order_int = int(order_val) if not isinstance(order_val, int) else order_val
+                                                last_order_before_break = max(last_order_before_break, order_int)
+                                            except (ValueError, TypeError):
+                                                pass
+                                except ValueError:
+                                    pass
+            
+            # Assign break order as fractional value after the last applicant
+            # e.g., if last applicant is 8, break becomes 8.5
+            break_order = last_order_before_break + 0.5 if last_order_before_break > 0 else 0.5
+            
+            # Create a BREAK row
+            break_row = {}
+            for col_name in original_columns:
+                if col_name == major_col:
+                    # Set discipline name so BREAK rows sort with that discipline
+                    break_row[col_name] = discipline
+                elif col_name == existing_date_col or col_name == 'Music Audition Date':
+                    break_row[col_name] = date_str
+                elif col_name == existing_time_col or col_name == 'Music Audition Time':
+                    # Format break time (use start time)
+                    if isinstance(break_start, datetime):
+                        break_row[col_name] = break_start.strftime('%I:%M %p').lstrip('0')
+                    else:
+                        break_row[col_name] = str(break_start)
+                elif col_name == existing_order_col or col_name == 'Music Audition Order':
+                    # BREAK rows get fractional order (e.g., 8.5 after applicant #8)
+                    break_row[col_name] = break_order
+                else:
+                    # For other columns, use "BREAK" in identifying fields
+                    col_lower = col_name.lower()
+                    if 'slate' in col_lower or 'id' in col_lower:
+                        # Application Slate ID or similar ID fields
+                        break_row[col_name] = "BREAK"
+                    elif 'last' in col_lower or 'first' in col_lower or 'name' in col_lower:
+                        # Name fields - use BREAK for visibility
+                        break_row[col_name] = "BREAK"
+                    else:
+                        break_row[col_name] = ""
+            
+            # Add scheduling fields if they don't exist
+            if not existing_date_col:
+                break_row[internal_date] = date_str
+            if not existing_time_col:
+                if isinstance(break_start, datetime):
+                    break_row[internal_time] = break_start.strftime('%I:%M %p').lstrip('0')
+                else:
+                    break_row[internal_time] = str(break_start)
+            if not existing_order_col:
+                break_row[internal_order] = break_order
+            
+            # Add a note about break type
+            break_row['_is_break'] = True
+            break_row['_break_type'] = break_type
+            
+            output.append(break_row)
+    
+    # Sort by Music Audition Order only
+    # Music Audition Order already encodes: degree precedence → date → time
+    # BREAK rows have fractional orders (e.g., 8.5) to appear in chronological position
+    def get_sort_key(row: Dict[str, Any]) -> Tuple[str, float]:
+        """Get sort key for proper ordering: discipline → Music Audition Order."""
+        # Get discipline/major for grouping (so each instrument is grouped together)
+        major_col = None
+        for col in original_columns:
+            if 'major' in col.lower() or ('discipline' in col.lower() and 'department' not in col.lower()):
+                major_col = col
+                break
+        
+        discipline = row.get(major_col, '') if major_col else ''
+        
+        # Get Music Audition Order (can be int or float for BREAK rows)
+        # Music Audition Order already includes degree precedence (BM first, then MM, etc.)
+        order_value = row.get(internal_order) or row.get(existing_order_col)
+        if order_value is None or order_value == "":
+            order_num = 999998.0  # Unscheduled rows at end
+        else:
+            try:
+                order_num = float(order_value)
+            except (ValueError, TypeError):
+                order_num = 999998.0
+        
+        return (discipline, order_num)
+    
+    output.sort(key=get_sort_key)
     
     return output
 

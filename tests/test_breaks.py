@@ -58,7 +58,7 @@ class TestLunchBreak:
         rules = RulesEngine(break_config_files)
         
         # Generate slots for 8-hour day
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
         
         # Check that no slots overlap with lunch break (1-2pm)
         lunch_start = datetime(2025, 3, 1, 13, 0)
@@ -88,7 +88,7 @@ class TestLunchBreak:
         rules = RulesEngine(break_config_files)
         
         # Generate slots for 3-hour day
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-02', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-02', applicant_count=100)
         
         # Check that slots can exist during lunch time (no break applied)
         lunch_start = datetime(2025, 3, 2, 13, 0)
@@ -113,7 +113,7 @@ class TestPeriodicBreaks:
         rules = RulesEngine(break_config_files)
         
         # Generate slots for 8-hour day
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
         
         if not slots:
             pytest.skip("No slots generated")
@@ -150,7 +150,7 @@ class TestBreakCombination:
         rules = RulesEngine(break_config_files)
         
         # Generate slots for 8-hour day
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
         
         if not slots:
             pytest.skip("No slots generated")

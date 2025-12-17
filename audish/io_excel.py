@@ -108,6 +108,16 @@ def write_schedule_excel(
     # Create parent directory if needed
     Path(filepath).parent.mkdir(parents=True, exist_ok=True)
     
+    # Delete existing file if it exists to ensure clean overwrite
+    # This prevents issues with locked files or permission problems
+    filepath_obj = Path(filepath)
+    if filepath_obj.exists():
+        try:
+            filepath_obj.unlink()
+        except Exception as e:
+            # If we can't delete, try to overwrite anyway
+            print(f"Warning: Could not delete existing file {filepath}: {e}")
+    
     wb.save(filepath)
     wb.close()
 
@@ -140,6 +150,16 @@ def write_conflicts_excel(
         for col_idx, col_name in enumerate(columns, start=1):
             ws.cell(row=1, column=col_idx, value=col_name)
         Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Delete existing file if it exists to ensure clean overwrite
+        filepath_obj = Path(filepath)
+        if filepath_obj.exists():
+            try:
+                filepath_obj.unlink()
+            except Exception as e:
+                # If we can't delete, try to overwrite anyway
+                print(f"Warning: Could not delete existing file {filepath}: {e}")
+        
         wb.save(filepath)
         wb.close()
         return
@@ -177,6 +197,16 @@ def write_conflicts_excel(
     
     # Create parent directory if needed
     Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Delete existing file if it exists to ensure clean overwrite
+    # This prevents issues with locked files or permission problems
+    filepath_obj = Path(filepath)
+    if filepath_obj.exists():
+        try:
+            filepath_obj.unlink()
+        except Exception as e:
+            # If we can't delete, try to overwrite anyway
+            print(f"Warning: Could not delete existing file {filepath}: {e}")
     
     wb.save(filepath)
     wb.close()

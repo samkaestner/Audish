@@ -60,7 +60,7 @@ class TestDisciplineTimeOverrides:
         rules = RulesEngine(discipline_time_config)
         
         # Violin should use 10:00-18:00 instead of calendar default 09:00-17:00
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
         
         assert len(slots) > 0, "Should generate slots"
         
@@ -78,7 +78,7 @@ class TestDisciplineTimeOverrides:
         rules = RulesEngine(discipline_time_config)
         
         # Piano BM should use 11:00 start (calendar end time 17:00)
-        slots_bm = rules.generate_slots('Piano', 'BM', '2025-03-01', applicant_count=100)
+        slots_bm, _ = rules.generate_slots('Piano', 'BM', '2025-03-01', applicant_count=100)
         
         assert len(slots_bm) > 0, "Should generate slots"
         
@@ -87,7 +87,7 @@ class TestDisciplineTimeOverrides:
         assert first_slot_start.minute == 0
         
         # Piano MM should use calendar default 09:00 start
-        slots_mm = rules.generate_slots('Piano', 'MM', '2025-03-01', applicant_count=100)
+        slots_mm, _ = rules.generate_slots('Piano', 'MM', '2025-03-01', applicant_count=100)
         
         assert len(slots_mm) > 0, "Should generate slots"
         
@@ -100,7 +100,7 @@ class TestDisciplineTimeOverrides:
         rules = RulesEngine(discipline_time_config)
         
         # Cello has no time overrides, should use calendar default 09:00-17:00
-        slots = rules.generate_slots('Cello', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Cello', 'BM', '2025-03-01', applicant_count=100)
         
         assert len(slots) > 0, "Should generate slots"
         
@@ -116,7 +116,7 @@ class TestDisciplineTimeOverrides:
         rules = RulesEngine(discipline_time_config)
         
         # Piano BM has only start_time override, should use calendar end_time (17:00)
-        slots = rules.generate_slots('Piano', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Piano', 'BM', '2025-03-01', applicant_count=100)
         
         assert len(slots) > 0, "Should generate slots"
         

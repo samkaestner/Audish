@@ -86,7 +86,7 @@ class RulesEngine:
         degree: str,
         date_str: str,
         applicant_count: int
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> Tuple[List[Tuple[datetime, datetime]], List[Dict[str, Any]]]:
         """
         Generate time slots for a discipline/degree on a specific date.
         
@@ -97,7 +97,7 @@ class RulesEngine:
             applicant_count: Number of applicants needing slots
             
         Returns:
-            List of (start_datetime, end_datetime) tuples
+            Tuple of (list of (start_datetime, end_datetime) tuples, list of break info dicts)
         """
         rule = self.get_discipline_rule(discipline, degree)
         if not rule:
@@ -189,12 +189,12 @@ class RulesEngine:
             )
         
         # Apply global breaks (lunch and periodic) before discipline-specific patterns
-        slots = self._apply_global_breaks(slots, day_start, day_end, cadence)
+        slots, breaks_info = self._apply_global_breaks(slots, day_start, day_end, cadence)
         
         # Apply special patterns
         slots = self._apply_special_patterns(slots, rule, applicant_count)
         
-        return slots
+        return slots, breaks_info
     
     def _parse_time(self, time_str: str) -> time:
         """Parse time string to time object."""
@@ -306,7 +306,7 @@ class RulesEngine:
         day_start: datetime,
         day_end: datetime,
         cadence: Dict[str, Any]
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> Tuple[List[Tuple[datetime, datetime]], List[Dict[str, Any]]]:
         """
         Apply global breaks: lunch break and periodic breaks.
         
@@ -317,10 +317,13 @@ class RulesEngine:
             cadence: Cadence config to determine slot duration
             
         Returns:
-            Modified slot list with breaks applied
+            Tuple of (modified slot list, list of break info dicts)
+            Break info dicts have: {'type': 'lunch'|'periodic', 'start': datetime, 'end': datetime}
         """
+        breaks_info = []
+        
         if not slots:
-            return slots
+            return slots, breaks_info
         
         # Calculate schedule duration in hours
         schedule_duration_hours = (day_end - day_start).total_seconds() / 3600
@@ -331,13 +334,16 @@ class RulesEngine:
         # Apply lunch break if enabled and schedule is long enough
         if (self.lunch_break.get('enabled', False) and 
             schedule_duration_hours > self.lunch_break.get('min_schedule_hours', 4)):
-            slots = self._apply_lunch_break(slots, day_start, slot_duration_minutes)
+            slots, lunch_break_info = self._apply_lunch_break(slots, day_start, slot_duration_minutes)
+            if lunch_break_info:
+                breaks_info.append(lunch_break_info)
         
         # Apply periodic breaks if enabled
         if self.periodic_break.get('enabled', False):
-            slots = self._apply_periodic_breaks_global(slots, day_start, cadence)
+            slots, periodic_breaks_info = self._apply_periodic_breaks_global(slots, day_start, cadence)
+            breaks_info.extend(periodic_breaks_info)
         
-        return slots
+        return slots, breaks_info
     
     def _get_slot_duration_minutes(self, cadence: Dict[str, Any]) -> int:
         """
@@ -370,9 +376,9 @@ class RulesEngine:
         slots: List[Tuple[datetime, datetime]],
         day_start: datetime,
         slot_duration_minutes: int
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> Tuple[List[Tuple[datetime, datetime]], Optional[Dict[str, Any]]]:
         """
-        Apply lunch break (1-2pm) by removing overlapping slots and shifting subsequent slots.
+        Apply lunch break (1-2pm) by removing overlapping slots.
         
         Args:
             slots: Slot list
@@ -380,7 +386,7 @@ class RulesEngine:
             slot_duration_minutes: Duration of one slot in minutes
             
         Returns:
-            Modified slot list
+            Tuple of (modified slot list, break info dict or None)
         """
         lunch_start_str = self.lunch_break.get('start', '13:00')
         lunch_end_str = self.lunch_break.get('end', '14:00')
@@ -395,34 +401,36 @@ class RulesEngine:
         lunch_duration_minutes = int(lunch_duration.total_seconds() / 60)
         
         result = []
-        shift_applied = False
+        break_applied = False
         
         for start, end in slots:
             # Check if slot overlaps with lunch break
             if not (end <= lunch_start or start >= lunch_end):
-                # Slot overlaps with lunch, skip it
+                # Slot overlaps with lunch, skip it (remove it)
+                break_applied = True
                 continue
             
-            # If slot is after lunch and we haven't shifted yet, shift it forward
-            if start >= lunch_end and not shift_applied:
-                # Shift all remaining slots forward by lunch duration
-                shift_applied = True
-            
-            if shift_applied:
-                # Shift slot forward by lunch duration
-                result.append((start + lunch_duration, end + lunch_duration))
-            else:
-                # Keep slot as-is (before lunch)
-                result.append((start, end))
+            # Keep slot as-is (don't shift - just remove overlapping slots)
+            # This creates a natural gap during lunch time
+            result.append((start, end))
         
-        return result
+        # Return break info if lunch break was applied
+        break_info = None
+        if break_applied:
+            break_info = {
+                'type': 'lunch',
+                'start': lunch_start,
+                'end': lunch_end
+            }
+        
+        return result, break_info
     
     def _apply_periodic_breaks_global(
         self,
         slots: List[Tuple[datetime, datetime]],
         day_start: datetime,
         cadence: Dict[str, Any]
-    ) -> List[Tuple[datetime, datetime]]:
+    ) -> Tuple[List[Tuple[datetime, datetime]], List[Dict[str, Any]]]:
         """
         Apply periodic breaks every N hours (break duration = one slot).
         
@@ -432,7 +440,7 @@ class RulesEngine:
             cadence: Cadence config to determine slot duration
             
         Returns:
-            Modified slot list with periodic breaks applied
+            Tuple of (modified slot list, list of break info dicts)
         """
         if not slots:
             return slots
@@ -445,18 +453,14 @@ class RulesEngine:
         break_duration = timedelta(minutes=slot_duration_minutes * duration_slots)
         
         # Calculate break times (every N hours from original day start)
-        # Note: breaks are calculated from original schedule, not shifted slots
+        # Note: lunch break no longer shifts slots, it just removes overlapping slots
         break_times = []
         current_break_time = day_start + timedelta(hours=interval_hours)
         
-        # Check if lunch break is enabled to avoid conflicts
-        # We check if lunch break was applied by looking at the slot times
-        # If slots have been shifted (lunch break applied), we can detect it
+        # Check if lunch break is enabled (to skip overlapping breaks)
         lunch_start = None
         lunch_end = None
         if self.lunch_break.get('enabled', False):
-            # Check if lunch break was likely applied by checking slot times
-            # If we see a gap around lunch time, lunch break was applied
             lunch_start_time = self._parse_time(self.lunch_break.get('start', '13:00'))
             lunch_end_time = self._parse_time(self.lunch_break.get('end', '14:00'))
             lunch_start = datetime.combine(day_start.date(), lunch_start_time)
@@ -473,12 +477,31 @@ class RulesEngine:
                 if not (break_end_time <= lunch_start or current_break_time >= lunch_end):
                     current_break_time += timedelta(hours=interval_hours)
                     continue
+                
+                # Also skip periodic breaks that occur too soon after lunch ends
+                # (within 1 hour of lunch end) to avoid creating excessively long gaps
+                # This prevents a periodic break from immediately following lunch break
+                time_after_lunch = (current_break_time - lunch_end).total_seconds() / 3600
+                if 0 <= time_after_lunch < 1.0:  # Within 1 hour after lunch end
+                    # Skip this break to avoid long gap after lunch
+                    current_break_time += timedelta(hours=interval_hours)
+                    continue
             
             break_times.append(current_break_time)
             current_break_time += timedelta(hours=interval_hours)
         
         if not break_times:
-            return slots
+            return slots, []
+        
+        # Build break info list
+        breaks_info = []
+        for break_time in break_times:
+            break_end = break_time + break_duration
+            breaks_info.append({
+                'type': 'periodic',
+                'start': break_time,
+                'end': break_end
+            })
         
         # Apply breaks: remove slots that overlap with break times, shift subsequent slots
         result = []
@@ -522,7 +545,7 @@ class RulesEngine:
             if adjusted_start is not None and adjusted_end is not None:
                 result.append((adjusted_start, adjusted_end))
         
-        return result
+        return result, breaks_info
     
     def _apply_special_patterns(
         self,

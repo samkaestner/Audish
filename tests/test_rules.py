@@ -101,7 +101,7 @@ class TestFixedIntervalSlots:
     
     def test_15_minute_intervals(self, sample_rules_file):
         rules = RulesEngine(sample_rules_file)
-        slots = rules.generate_slots("Cello", "MM", "2025-03-01", applicant_count=4)
+        slots, _ = rules.generate_slots("Cello", "MM", "2025-03-01", applicant_count=4)
         
         assert len(slots) == 4
         
@@ -114,7 +114,7 @@ class TestFixedIntervalSlots:
     
     def test_30_minute_intervals(self, sample_rules_file):
         rules = RulesEngine(sample_rules_file)
-        slots = rules.generate_slots("Percussion", "DMA", "2025-03-01", applicant_count=10)
+        slots, _ = rules.generate_slots("Percussion", "DMA", "2025-03-01", applicant_count=10)
         
         # With end_of_cycle_buffer of 60 minutes and 3-hour window (9am-12pm),
         # only slots ending before 11am are kept
@@ -132,7 +132,7 @@ class TestPerHourSlots:
     
     def test_5_per_hour_distribution(self, sample_rules_file):
         rules = RulesEngine(sample_rules_file)
-        slots = rules.generate_slots("Cello", "BM", "2025-03-01", applicant_count=10)
+        slots, _ = rules.generate_slots("Cello", "BM", "2025-03-01", applicant_count=10)
         
         # Should generate at least 10 slots
         assert len(slots) >= 10
@@ -157,7 +157,7 @@ class TestSpecialPatterns:
         rules = RulesEngine(sample_rules_file)
         
         # Oboe has open_minutes_per_hour: 12
-        slots = rules.generate_slots("Oboe", "BM", "2025-03-01", applicant_count=20)
+        slots, _ = rules.generate_slots("Oboe", "BM", "2025-03-01", applicant_count=20)
         
         # Should generate fewer slots than without open time
         # With 5/hr cap and open time, expect ~4 slots per hour
@@ -168,7 +168,7 @@ class TestSpecialPatterns:
         rules = RulesEngine(sample_rules_file)
         
         # Conducting has mid_schedule_break_minutes: 20
-        slots = rules.generate_slots("Orchestral Conducting", "BM", "2025-03-01", applicant_count=10)
+        slots, _ = rules.generate_slots("Orchestral Conducting", "BM", "2025-03-01", applicant_count=10)
         
         # Should have 10 slots with a gap in the middle
         assert len(slots) == 10
@@ -186,7 +186,7 @@ class TestSpecialPatterns:
         rules = RulesEngine(sample_rules_file)
         
         # Percussion DMA has end_of_cycle_buffer_minutes: 60
-        slots = rules.generate_slots("Percussion", "DMA", "2025-03-01", applicant_count=20)
+        slots, _ = rules.generate_slots("Percussion", "DMA", "2025-03-01", applicant_count=20)
         
         # Last slot should end at least 60 minutes before day end (17:00)
         if slots:
@@ -201,7 +201,7 @@ class TestBreakEveryN:
         rules = RulesEngine(sample_rules_file)
         
         # French Horn has break_every_n_applicants: 5, break_minutes: 15
-        slots = rules.generate_slots("French Horn (Recorded)", "BM", "2025-03-01", applicant_count=12)
+        slots, _ = rules.generate_slots("French Horn (Recorded)", "BM", "2025-03-01", applicant_count=12)
         
         # Should generate 12 slots with breaks after 5th and 10th
         assert len(slots) == 12

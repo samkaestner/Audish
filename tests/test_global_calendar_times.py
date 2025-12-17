@@ -58,7 +58,7 @@ class TestGlobalCalendarTimes:
         rules = RulesEngine(global_calendar_time_config)
         
         # Day 2025-03-01 has no start/end, should use global defaults (10:00-18:00)
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-01', applicant_count=100)
         
         assert len(slots) > 0, "Should generate slots"
         
@@ -74,7 +74,7 @@ class TestGlobalCalendarTimes:
         rules = RulesEngine(global_calendar_time_config)
         
         # Day 2025-03-02 has explicit start/end (09:00-17:00), should override global defaults
-        slots = rules.generate_slots('Violin', 'BM', '2025-03-02', applicant_count=100)
+        slots, _ = rules.generate_slots('Violin', 'BM', '2025-03-02', applicant_count=100)
         
         assert len(slots) > 0, "Should generate slots"
         
@@ -90,7 +90,7 @@ class TestGlobalCalendarTimes:
         rules = RulesEngine(global_calendar_time_config)
         
         # Piano has start_time: "11:00", should override global default (10:00)
-        slots = rules.generate_slots('Piano', 'BM', '2025-03-01', applicant_count=100)
+        slots, _ = rules.generate_slots('Piano', 'BM', '2025-03-01', applicant_count=100)
         
         assert len(slots) > 0, "Should generate slots"
         

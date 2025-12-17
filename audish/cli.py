@@ -135,6 +135,7 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
     try:
         scheduler = Scheduler(rules_engine, faculty_availability, applicants, mapper, faculty_name_map)
         scheduled, conflicts = scheduler.schedule()
+        breaks = scheduler.breaks  # Get break information
         click.echo(f"  ✓ Scheduled: {len(scheduled)} applicants")
         click.echo(f"  ✓ Conflicts: {len(conflicts)} applicants")
     except Exception as e:
@@ -146,8 +147,8 @@ def schedule(app, fac, mapping_file, rules_file, out_schedule, out_conflicts, ou
     # 7. Write output files
     click.echo("\n[7/7] Writing output files...")
     try:
-        # Format scheduled output
-        scheduled_output = format_scheduled_output(scheduled, mapper, original_columns)
+        # Format scheduled output (includes BREAK rows)
+        scheduled_output = format_scheduled_output(scheduled, mapper, original_columns, breaks=breaks)
         
         # Write schedule
         write_schedule_excel(out_schedule, original_columns, scheduled_output)
